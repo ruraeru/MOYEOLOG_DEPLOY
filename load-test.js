@@ -30,7 +30,7 @@ export default function () {
   sleep(1); // Wait 1 second (think time)
 
   // Scenario 2: Hit Backend API Endpoint
-  const apiRes = http.get(`${TARGET_URL}/api/search-image`);
+  const apiRes = http.get(`${TARGET_URL}/api/search-image?query=coffee`);
   check(apiRes, {
     // 429 is an expected response if Rate Limiting kicks in under load
     'API status is 200 or 429': (r) => r.status === 200 || r.status === 429,
