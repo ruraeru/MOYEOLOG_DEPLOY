@@ -3,7 +3,7 @@ services:
     image: mysql:8.0
     container_name: moyeolog-db
     restart: always
-    command: --innodb-buffer-pool-size=128M
+    command: --innodb-buffer-pool-size=512M
     environment:
       MYSQL_DATABASE: ${MYSQL_DATABASE:-moyeolog}
       MYSQL_USER: ${MYSQL_USER:-moyeolog_user}
@@ -49,6 +49,8 @@ services:
       - app
     networks:
       - frontend-net
+    volumes:
+      - fe_image_cache:/app/.next/cache/images
     logging:
       driver: "json-file"
       options:
@@ -153,6 +155,7 @@ services:
 volumes:
   db_data:
   app_images:
+  fe_image_cache:
 
 networks:
   frontend-net:
