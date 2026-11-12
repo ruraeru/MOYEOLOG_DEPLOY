@@ -1,0 +1,8 @@
+[submodule "MOYEOLOG_BE"]
+	path = MOYEOLOG_BE
+	url = https://github.com/ruraeru/MOYEOLOG_BE
+	branch = main
+[submodule "MOYEOLOG_FE"]
+	path = MOYEOLOG_FE
+	url = https://github.com/ruraeru/MOYEOLOG_FE
+	branch = main

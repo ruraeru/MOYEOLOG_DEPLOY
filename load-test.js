@@ -19,7 +19,7 @@ export const options = {
   },
 };
 
-const TARGET_URL = 'https://moyeolog.kro.kr';
+const TARGET_URL = 'https://moyeolog.ruraeru.xyz';
 
 export default function () {
   // Scenario 1: Hit Frontend UI Home page
