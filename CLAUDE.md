@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 현재 작업 브랜치: 세 레포 모두 `fix/qa-findings` (푸시됨, `main` 에는 아직 합치지 않음). 실서비스는 이 브랜치 코드로 돌고 있다.
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings` 는 2026-11-12 에 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
 
 ## 구조
 
@@ -60,11 +60,10 @@ docker compose up -d --build
    - 권한·설계: 공유받은 메모 읽기 전용, 사용자별 즐겨찾기, 그룹 수정 방장 전용, 오류 응답을 500 대신 4xx 로, 리프레시 토큰 구조 개편.
    - 추가된 API: `DELETE /api/memos/{id}/share/{targetUserId}`, `DELETE /api/groups/{id}/members/me`, `DELETE /api/groups/{id}`. 프론트 화면은 아직 없다.
 4. **배포와 재검증**: DB·업로드 백업 후 QA 테스트 데이터 삭제, 컬럼 타입 변경, 새 이미지 배포. QA 에서 재현됐던 항목을 같은 요청으로 다시 확인해 통과.
-5. **커밋·푸시**: 세 레포 `fix/qa-findings`.
+5. **커밋·푸시·머지**: 세 레포 `fix/qa-findings` → `main` (BE #1, FE #2, DEPLOY #1). 서브모듈 포인터는 각 레포 `main` 의 머지 커밋.
 
 ## 남은 일
 
-- `fix/qa-findings` 를 `main` 에 합치기 (PR 미생성).
 - 고치지 않은 것: customId 변경 기능, 토픽 이미지가 base64 로 DB 에 저장되는 구조, robots/OG 태그, 공유 해제·모임 나가기·모임 삭제 화면, 모임 초대를 보내는 화면(`GroupInviteModal` 이 어디에도 연결돼 있지 않음), 프론트 lint 오류 1건(`AlertContainer.tsx`, 기존 문제).
 - 확인하지 못한 것: 실제 Kakao 로그인 완료 흐름과 브라우저 화면 동작(자동화 브라우저 스크린샷으로 홈·메모·설정 렌더링만 확인), 8083/3003 포트가 외부 인터넷에서 직접 닿는지.
 - 대화에 평문으로 올라온 키(Gemini, Kakao Client Secret, Kakao 어드민 키)는 재발급 권장.
