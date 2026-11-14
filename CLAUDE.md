@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 브랜치: 세 레포 모두 `main`. `fix/qa-findings` 는 2026-11-12 에 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14) 은 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
 
 ## 구조
 
@@ -61,6 +61,10 @@ docker compose up -d --build
    - 추가된 API: `DELETE /api/memos/{id}/share/{targetUserId}`, `DELETE /api/groups/{id}/members/me`, `DELETE /api/groups/{id}`. 프론트 화면은 아직 없다.
 4. **배포와 재검증**: DB·업로드 백업 후 QA 테스트 데이터 삭제, 컬럼 타입 변경, 새 이미지 배포. QA 에서 재현됐던 항목을 같은 요청으로 다시 확인해 통과.
 5. **커밋·푸시·머지**: 세 레포 `fix/qa-findings` → `main` (BE #1, FE #2, DEPLOY #1). 서브모듈 포인터는 각 레포 `main` 의 머지 커밋.
+
+## 화면 디자인 정리 (2026-11-14)
+
+FE PR #3 (`design/unslop`) 머지 후 배포. 디자인 토큰은 `MOYEOLOG_FE/src/app/globals.css` 에 있다: 표면 `bg-canvas/surface/raised`, 글자 `text-ink/ink-2/ink-3`, 선 `border-line`, 강조 `bg-accent`(잉크 남색 #2f4fb5, 화면당 몇 군데만), 컴포넌트 `.btn-primary/secondary/ghost` `.form-input` `.card`, 날짜·시각은 `.stamp` + date-fns `'M.d EEE HH:mm'`(ko). 새 화면도 이 토큰을 쓰고 indigo/gray 같은 Tailwind 기본색, `font-bold` 이상, `uppercase`, `transition-all` 은 쓰지 않는다. 라이트 모드 전용. 모임별 색은 `lib/constants.ts` 의 `THEME_COLORS` (점은 `.dot`).
 
 ## 남은 일
 
