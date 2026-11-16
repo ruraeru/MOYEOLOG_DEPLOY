@@ -23,7 +23,7 @@
 | --- | --- | --- |
 | `nginx` | `moyeolog-nginx` | 경로별 라우팅, 보안 헤더·CSP, rate limit, `/uploads` 정적 제공 |
 | `frontend` | `moyeolog-frontend` | Next.js 화면과 NextAuth(카카오 로그인) |
-| `app` | `moyeolog-app` | REST API, 파일 업로드, Gemini 요약 |
+| `app` | `moyeolog-app` | REST API, 파일 업로드, AI 요약·OCR (Ollama 서버, 실패 시 Gemini) |
 | `db` | `moyeolog-db` | MySQL 8.0 |
 
 - TLS 는 외부 Caddy 가 처리합니다. 이 스택은 HTTP 만 다루고 certbot 은 없습니다.
@@ -56,9 +56,25 @@ docker compose up -d --build
 | `INTERNAL_API_SECRET` | 프론트 서버가 백엔드 `/api/auth/sync` 를 부를 때 쓰는 공유 시크릿. 프론트와 백엔드에 같은 값이 들어가야 로그인이 된다 |
 | `KAKAO_CLIENT_ID`, `KAKAO_CLIENT_SECRET` | 카카오 로그인 (REST API 키, Client Secret) |
 | `NEXT_PUBLIC_KAKAO_MAP_API_KEY` | 카카오 지도 (JavaScript 키) |
-| `GEMINI_API_KEY` | 메모 요약·OCR |
+| `LLM_API_KEY` | AI 서버(`https://ai.ruraeru.xyz`) Bearer 토큰. 메모·토픽 요약·OCR·키워드에 쓴다 |
 
 랜덤 시크릿은 `openssl rand -base64 48` 로 만들 수 있습니다.
+
+### AI 분석 (요약·OCR·키워드)
+
+메모·토픽의 "AI 분석" 은 백엔드가 Ollama 호환 서버의 `/api/chat` 을 먼저 부릅니다. 기본 서버는 `https://ai.ruraeru.xyz` 입니다. 연결 실패, 시간 초과(150초), HTTP 오류, 빈 응답, 형식 오류가 나면 `GEMINI_API_KEY` 가 있을 때 같은 요청을 Gemini 로 보냅니다.
+
+| 변수 | 기본값 | 설명 |
+| --- | --- | --- |
+| `LLM_BASE_URL` | `https://ai.ruraeru.xyz` | Ollama 호환 서버 주소 |
+| `LLM_MODEL` | `qwen3.5:9b` | 모델 이름. 이미지 OCR 을 하려면 비전을 지원하는 모델이어야 한다 |
+| `LLM_API_KEY` | (없음) | 서버 Bearer 토큰. 앞뒤 공백·따옴표·`Bearer ` 는 백엔드가 걷어낸다 |
+| `GEMINI_API_KEY` | (없음) | Ollama 실패 시 대체. 비워 두면 대체하지 않고 오류를 낸다 |
+
+- 어느 쪽이 응답했는지는 `docker compose logs app | grep "\[AI\]"` 의 `Calling qwen3.5:9b` / `Gemini 로 재시도` 로 봅니다.
+- 키가 맞는지 확인: `curl -H "Authorization: Bearer $LLM_API_KEY" https://ai.ruraeru.xyz/api/tags`
+- 로컬 모델은 1분을 넘길 수 있습니다. 분석 요청만 nginx 대기 시간 300초, 프론트 axios 타임아웃 300초로 늘려 두었습니다. 외부 Caddy 의 응답 대기 시간도 5분 이상이어야 합니다.
+- 값을 바꾼 뒤에는 `docker compose up -d app && docker exec moyeolog-nginx nginx -s reload` 로 백엔드만 다시 띄우면 됩니다 (빌드 불필요).
 
 > `NEXT_PUBLIC_*` 값은 프론트 **빌드 시점**에 번들에 들어갑니다. 바꾸면 `docker compose up -d --build frontend` 로 다시 빌드해야 합니다.
 
@@ -146,14 +162,6 @@ docker run --rm -v moyeolog_app_images:/d:ro -v "$PWD/data/backups":/b alpine \
 
 `data/` 는 git 에 올라가지 않습니다. 정기 백업이 필요하면 cron 에 `backup.sh` 를 등록합니다.
 
-### 모니터링 (선택)
-
-Prometheus, Grafana, cAdvisor, Dozzle 은 별도 스택입니다. `.env` 에 `GRAFANA_ADMIN_PASSWORD`, `DOZZLE_PASSWORD` 를 넣은 뒤 실행합니다. UI 는 `127.0.0.1` 에만 열립니다.
-
-```bash
-docker compose -f docker-compose.monitoring.yml up -d
-```
-
 ### 부하 테스트 (선택)
 
 [`load-test.js`](load-test.js) 는 k6 시나리오입니다. 운영 주소에 직접 요청하므로 사용자가 적은 시간에 돌립니다.
@@ -182,3 +190,5 @@ docker run --rm -i grafana/k6 run - < load-test.js
 | 지도가 안 뜸 | `NEXT_PUBLIC_KAKAO_MAP_API_KEY` 가 JavaScript 키인지, 바꾼 뒤 `--build` 했는지, 브라우저 콘솔의 CSP 오류 |
 | 일정 시각이 9시간 어긋남 | 프론트가 `toISOString()` 으로 보내고 있는지, 백엔드 `TZ` |
 | 이미지 업로드 실패 | 업로드 볼륨 소유자(uid 1001), 파일 형식 |
+| AI 분석이 "오류가 발생했습니다" | `docker compose logs app \| grep "\[AI\]"` 의 `upstream status`. 401/403 이면 `LLM_API_KEY`, 연결 실패면 `LLM_BASE_URL` 접속 여부 |
+| AI 분석이 1분쯤에서 끊김 | nginx·프론트 이미지가 최신인지, 외부 Caddy 응답 대기 시간 |
