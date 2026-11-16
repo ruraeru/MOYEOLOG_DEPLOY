@@ -56,6 +56,11 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
       - JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION:-604800000}
+      # 메모·토픽 AI 분석: ollama(기본) 또는 gemini
+      - AI_PROVIDER=${AI_PROVIDER:-ollama}
+      - LLM_BASE_URL=${LLM_BASE_URL:-https://ai.ruraeru.xyz}
+      - LLM_MODEL=${LLM_MODEL:-qwen3.5:9b}
+      - LLM_API_KEY=${LLM_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - CORS_ALLOWED_ORIGINS=${APP_URL:-https://moyeolog.ruraeru.xyz}
       # 프론트(NextAuth) 서버만 /api/auth/sync 를 호출할 수 있도록 하는 공유 시크릿
