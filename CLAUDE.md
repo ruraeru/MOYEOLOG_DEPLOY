@@ -45,7 +45,7 @@ docker compose up -d --build
 - **신뢰 프록시**: `set_real_ip_from 172.30.1.10` (Caddy) 하나만 신뢰한다. Caddy 주소가 바뀌면 nginx 접속 로그의 `peer=` 값을 보고 고친다. 범위를 넓히면 `X-Forwarded-For` 조작으로 rate limit 이 우회된다.
 - **CSP**: `nginx/conf.d/default.conf` 에 있다. Kakao 지도 SDK 는 `*.kakaocdn.net` 에서 스크립트를 받는다. 외부 리소스를 추가하면 CSP 도 고친다.
 - **업로드**: 백엔드가 파일 내용(매직 바이트)으로 JPEG/PNG/GIF/WEBP 만 받고 확장자는 서버가 정한다. nginx 는 `/uploads/` 에서 이미지 확장자만 이미지로 내려주고 나머지는 다운로드로 처리한다. 업로드 볼륨은 uid 1001 소유여야 한다 (백엔드가 non-root 로 실행).
-- **AI 분석**: 기본은 Ollama 호환 서버(`LLM_BASE_URL`, 기본 `https://ai.ruraeru.xyz`)의 `/api/chat`, 토큰은 `LLM_API_KEY`. `AI_PROVIDER=gemini` 면 Gemini. 구현은 `GeminiService` 한 곳(이름은 그대로). 분석 요청만 nginx·axios 타임아웃 300초.
+- **AI 분석**: 기본은 Ollama 호환 서버(`LLM_BASE_URL`, 기본 `https://ai.ruraeru.xyz`)의 `/api/chat`, 토큰은 `LLM_API_KEY`. Ollama 가 실패(연결·150초 초과·HTTP 오류·형식 오류)하면 `GEMINI_API_KEY` 가 있을 때 Gemini 로 다시 보낸다. 구현은 `GeminiService` 한 곳(이름은 그대로). 분석 요청만 nginx·axios 타임아웃 300초.
 - **Swagger**: 기본으로 꺼져 있다. 필요하면 `.env` 에 `SWAGGER_ENABLED=true`.
 - **Kakao 키**: REST API 키(`KAKAO_CLIENT_ID`), Client Secret, JavaScript 키(`NEXT_PUBLIC_KAKAO_MAP_API_KEY`) 는 모두 같은 Kakao 앱의 것이어야 하고, 그 앱에 사이트 도메인과 Redirect URI `https://moyeolog.ruraeru.xyz/api/auth/callback/kakao` 가 등록돼 있어야 한다.
 - **git**: 이 서버에는 전역 git 사용자 설정이 없다. 커밋은 `git -c user.name=ruraeru -c user.email=f93335383@gmail.com commit ...` 으로 했다. 푸시는 `gh auth login` 으로 인증돼 있다. 서브모듈을 먼저 푸시하고 배포 레포를 푸시한다.

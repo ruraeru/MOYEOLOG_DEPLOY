@@ -23,7 +23,7 @@
 | --- | --- | --- |
 | `nginx` | `moyeolog-nginx` | 경로별 라우팅, 보안 헤더·CSP, rate limit, `/uploads` 정적 제공 |
 | `frontend` | `moyeolog-frontend` | Next.js 화면과 NextAuth(카카오 로그인) |
-| `app` | `moyeolog-app` | REST API, 파일 업로드, AI 요약·OCR (Ollama 서버 또는 Gemini) |
+| `app` | `moyeolog-app` | REST API, 파일 업로드, AI 요약·OCR (Ollama 서버, 실패 시 Gemini) |
 | `db` | `moyeolog-db` | MySQL 8.0 |
 
 - TLS 는 외부 Caddy 가 처리합니다. 이 스택은 HTTP 만 다루고 certbot 은 없습니다.
@@ -62,16 +62,16 @@ docker compose up -d --build
 
 ### AI 분석 (요약·OCR·키워드)
 
-메모·토픽의 "AI 분석" 은 백엔드가 Ollama 호환 서버의 `/api/chat` 을 부릅니다. 기본 서버는 `https://ai.ruraeru.xyz` 입니다.
+메모·토픽의 "AI 분석" 은 백엔드가 Ollama 호환 서버의 `/api/chat` 을 먼저 부릅니다. 기본 서버는 `https://ai.ruraeru.xyz` 입니다. 연결 실패, 시간 초과(150초), HTTP 오류, 빈 응답, 형식 오류가 나면 `GEMINI_API_KEY` 가 있을 때 같은 요청을 Gemini 로 보냅니다.
 
 | 변수 | 기본값 | 설명 |
 | --- | --- | --- |
-| `AI_PROVIDER` | `ollama` | `ollama` 또는 `gemini` |
 | `LLM_BASE_URL` | `https://ai.ruraeru.xyz` | Ollama 호환 서버 주소 |
 | `LLM_MODEL` | `qwen3.5:9b` | 모델 이름. 이미지 OCR 을 하려면 비전을 지원하는 모델이어야 한다 |
 | `LLM_API_KEY` | (없음) | 서버 Bearer 토큰. 앞뒤 공백·따옴표·`Bearer ` 는 백엔드가 걷어낸다 |
-| `GEMINI_API_KEY` | (없음) | `AI_PROVIDER=gemini` 일 때만 쓴다 |
+| `GEMINI_API_KEY` | (없음) | Ollama 실패 시 대체. 비워 두면 대체하지 않고 오류를 낸다 |
 
+- 어느 쪽이 응답했는지는 `docker compose logs app | grep "\[AI\]"` 의 `Calling qwen3.5:9b` / `Gemini 로 재시도` 로 봅니다.
 - 키가 맞는지 확인: `curl -H "Authorization: Bearer $LLM_API_KEY" https://ai.ruraeru.xyz/api/tags`
 - 로컬 모델은 1분을 넘길 수 있습니다. 분석 요청만 nginx 대기 시간 300초, 프론트 axios 타임아웃 300초로 늘려 두었습니다. 외부 Caddy 의 응답 대기 시간도 5분 이상이어야 합니다.
 - 값을 바꾼 뒤에는 `docker compose up -d app && docker exec moyeolog-nginx nginx -s reload` 로 백엔드만 다시 띄우면 됩니다 (빌드 불필요).
