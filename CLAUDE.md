@@ -49,7 +49,6 @@ docker compose up -d --build
 - **Swagger**: 기본으로 꺼져 있다. 필요하면 `.env` 에 `SWAGGER_ENABLED=true`.
 - **Kakao 키**: REST API 키(`KAKAO_CLIENT_ID`), Client Secret, JavaScript 키(`NEXT_PUBLIC_KAKAO_MAP_API_KEY`) 는 모두 같은 Kakao 앱의 것이어야 하고, 그 앱에 사이트 도메인과 Redirect URI `https://moyeolog.ruraeru.xyz/api/auth/callback/kakao` 가 등록돼 있어야 한다.
 - **git**: 이 서버에는 전역 git 사용자 설정이 없다. 커밋은 `git -c user.name=ruraeru -c user.email=f93335383@gmail.com commit ...` 으로 했다. 푸시는 `gh auth login` 으로 인증돼 있다. 서브모듈을 먼저 푸시하고 배포 레포를 푸시한다.
-- **모니터링**: `docker-compose.monitoring.yml` 은 별도 스택. 비밀번호는 `.env` 의 `GRAFANA_ADMIN_PASSWORD`, `DOZZLE_PASSWORD` 로 넣고, UI 는 127.0.0.1 에만 열린다. 지금은 실행하고 있지 않다.
 
 ## 지금까지 한 일 (2026-11-12)
 

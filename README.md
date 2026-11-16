@@ -162,14 +162,6 @@ docker run --rm -v moyeolog_app_images:/d:ro -v "$PWD/data/backups":/b alpine \
 
 `data/` 는 git 에 올라가지 않습니다. 정기 백업이 필요하면 cron 에 `backup.sh` 를 등록합니다.
 
-### 모니터링 (선택)
-
-Prometheus, Grafana, cAdvisor, Dozzle 은 별도 스택입니다. `.env` 에 `GRAFANA_ADMIN_PASSWORD`, `DOZZLE_PASSWORD` 를 넣은 뒤 실행합니다. UI 는 `127.0.0.1` 에만 열립니다.
-
-```bash
-docker compose -f docker-compose.monitoring.yml up -d
-```
-
 ### 부하 테스트 (선택)
 
 [`load-test.js`](load-test.js) 는 k6 시나리오입니다. 운영 주소에 직접 요청하므로 사용자가 적은 시간에 돌립니다.
