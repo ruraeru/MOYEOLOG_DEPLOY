@@ -15,7 +15,7 @@
                이 서버 :3003 ─▶ nginx ─┬─ /api, /uploads ─────────────────────────────▶ app:8080 (Spring Boot)
                                        └─ /api/auth, /api/search-image,
                                           /api/proxy-image, 그 외 모든 경로 ─▶ frontend:3000 (Next.js)
-               이 서버 :8083 ─▶ app:8080 (백엔드 직접 접근)
+               127.0.0.1:8083 ─▶ app:8080 (서버 안에서만 백엔드 직접 접근)
                                        app ─▶ db:3306 (MySQL)
 ```
 
@@ -90,7 +90,10 @@ REST API 키, Client Secret, JavaScript 키는 모두 **같은 카카오 앱**�
 | 변수 | 기본값 | 용도 |
 | --- | --- | --- |
 | `FRONTEND_PORT` | 3003 | 서비스 진입점 (nginx). 외부 프록시가 이 포트로 연결 |
-| `BACKEND_PORT` | 8083 | 백엔드 직접 접근 |
+| `FRONTEND_BIND` | 0.0.0.0 | nginx 를 열 주소. 외부 Caddy 가 닿는 LAN IP 하나로 좁혀도 된다 |
+| `BACKEND_PORT` | 8083 | 백엔드 직접 접근. **`127.0.0.1` 에만** 열린다 (서버 안에서 `curl http://127.0.0.1:8083/...`) |
+
+백엔드 포트를 외부에 열면 nginx 의 rate limit, `/api/auth/*` 차단, 보안 헤더를 모두 우회하게 됩니다. Docker 가 연 포트는 ufw 도 우회하므로 `127.0.0.1` 바인딩을 유지합니다.
 
 같은 서버에서 다른 프로젝트가 3000~3002, 8080~8082 를 쓰고 있어 피했습니다.
 
@@ -153,14 +156,31 @@ docker exec -it moyeolog-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" moyeolo
 ./backup.sh      # Windows 는 backup.ps1
 ```
 
-`backup.sh` 는 **DB 만** 덤프해서 `data/backups/backup_<시각>.tar.gz` 로 저장하고, 7일이 지난 백업은 지웁니다. 업로드 파일은 따로 백업합니다.
+`backup.sh` 는 DB 와 업로드 파일을 함께 백업합니다.
 
-```bash
-docker run --rm -v moyeolog_app_images:/d:ro -v "$PWD/data/backups":/b alpine \
-  tar czf /b/uploads_$(date +%Y%m%d_%H%M%S).tar.gz -C /d .
+| 파일 | 내용 |
+| --- | --- |
+| `data/backup/db-<시각>.sql.gz` | `moyeolog-db` 컨테이너 안에서 `mysqldump --single-transaction` (끝에 `Dump completed` 가 없으면 실패 처리) |
+| `data/backup/uploads-<시각>.tar.gz` | `moyeolog_app_images` 볼륨을 읽기 전용으로 붙여 tar |
+
+- 파일은 `600`, 폴더는 `700` 으로 만듭니다. 비밀번호는 명령줄에 나오지 않습니다(DB 컨테이너가 가진 `MYSQL_ROOT_PASSWORD` 를 컨테이너 안에서 `MYSQL_PWD` 로 넘김, `.env` 는 읽지 않음).
+- 14일이 지난 `db-*.sql.gz`, `uploads-*.tar.gz` 만 지웁니다. 손으로 만든 덤프(`before-*.sql` 등)는 그대로 둡니다. 보존 기간은 `RETENTION_DAYS=30 ./backup.sh` 처럼 바꿉니다.
+- 동시에 두 번 돌지 않도록 잠금을 겁니다. 실행한 사용자는 `docker` 를 쓸 수 있어야 합니다.
+- `data/` 는 git 에 올라가지 않습니다. 같은 디스크에만 있으면 디스크 고장 때 함께 잃으므로, 가끔 다른 곳으로 복사해 둡니다.
+
+**주기 실행**: 매일 새벽 4시에 돌리려면 `crontab -e` 로 다음 한 줄을 넣습니다 (경로는 이 레포 위치에 맞게).
+
+```cron
+0 4 * * * /home/ruraeru/MOYEOLOG_DEPLOY/backup.sh >> /home/ruraeru/MOYEOLOG_DEPLOY/data/backup/backup.log 2>&1
 ```
 
-`data/` 는 git 에 올라가지 않습니다. 정기 백업이 필요하면 cron 에 `backup.sh` 를 등록합니다.
+**복원**:
+
+```bash
+gunzip -c data/backup/db-<시각>.sql.gz | docker exec -i moyeolog-db sh -c 'MYSQL_PWD="$MYSQL_ROOT_PASSWORD" mysql -uroot moyeolog'
+docker run --rm -v moyeolog_app_images:/data -v "$PWD/data/backup":/b:ro nginx:1.25-alpine \
+  sh -c 'tar xzf /b/uploads-<시각>.tar.gz -C /data && chown -R 1001:1001 /data'
+```
 
 ### 부하 테스트 (선택)
 
@@ -174,9 +194,13 @@ docker run --rm -i grafana/k6 run - < load-test.js
 
 - **백엔드 설정 파일이 없습니다.** `application.yml` 은 git 에 없고, 운영 설정은 전부 `docker-compose.yml` 의 환경변수로 들어갑니다. 새 설정은 `@Value` 기본값을 주고 `application.yml.example` 과 compose 에 함께 추가합니다.
 - **시간대**: 일정 시각과 작성 시각은 오프셋 없는 한국 시간(`LocalDateTime`)입니다. 백엔드는 `TZ=Asia/Seoul` 로 돌고, 프론트는 `yyyy-MM-dd'T'HH:mm:ss` 형식으로 보냅니다 (`toISOString()` 을 쓰면 9시간 밀립니다).
-- **내부 API**: nginx 는 `/api/auth/sync`, `/api/auth/refresh` 를 외부에 404 로 막습니다. 프론트 서버만 내부 네트워크로 부릅니다.
+- **내부 API**: nginx 는 `/api/auth/sync`, `/api/auth/refresh`, `/api/auth/logout` 을 외부에 404 로 막습니다. 프론트 서버만 내부 네트워크로 부릅니다.
+- **본문 한도와 오류 형식**: nginx 본문 한도는 백엔드와 같은 10MB 입니다(넘으면 백엔드까지 가지 않고 즉시 413). nginx 가 직접 내는 413·429·400 은 백엔드와 같은 JSON `{error, message, status}` 입니다([`nginx/snippets/json-errors.conf`](nginx/snippets/json-errors.conf)). 백엔드 한도를 바꾸면 `client_max_body_size` 와 413 문구도 같이 바꿉니다. 한도가 어긋나면 큰 업로드가 60초 동안 매달립니다.
+- **rate limit**: `/api` 는 IP 당 초당 10회(버스트 20), `/_next/image` 는 초당 10회(버스트 50).
+- **보안 헤더 중복**: 백엔드(Spring Security)도 `X-Frame-Options`, `X-Content-Type-Options` 를 보냅니다. nginx 가 프록시 응답에서 이를 숨기고 한 번만 붙입니다([`nginx/snippets/proxy.conf`](nginx/snippets/proxy.conf)). 프록시하는 location 을 새로 만들면 이 파일을 include 합니다.
+- **접근 로그**: server 블록의 `proxied` 형식 한 줄만 남습니다. `access_log` 를 http 레벨로 옮기면 nginx 기본 `main` 로그와 함께 두 줄씩 남습니다.
 - **신뢰 프록시**: nginx 는 외부 Caddy 주소 하나만 `set_real_ip_from` 으로 신뢰합니다. Caddy 주소가 바뀌면 접속 로그의 `peer=` 값을 보고 [`nginx/conf.d/default.conf`](nginx/conf.d/default.conf) 를 고칩니다. 범위를 넓히면 `X-Forwarded-For` 조작으로 rate limit 이 우회됩니다.
-- **CSP**: `nginx/conf.d/default.conf` 에 있습니다. 외부 스크립트·이미지·폰트를 추가하면 CSP 도 같이 고칩니다. 카카오 지도 SDK 는 `*.kakaocdn.net` 에서 스크립트를 받습니다.
+- **CSP**: `nginx/conf.d/default.conf` 에 있습니다. 외부 스크립트·이미지·폰트를 추가하면 CSP 도 같이 고칩니다. 카카오 지도 SDK 는 `*.kakaocdn.net` 에서 스크립트를 받습니다. 이미지는 `https:` 만 허용합니다(`http:` 이미지는 화면의 `upgrade-insecure-requests` 로 https 로 받음). `base-uri`·`form-action`·`frame-ancestors 'self'`, `object-src 'none'` 을 둡니다. Next.js 인라인 스크립트 때문에 `'unsafe-inline'` 은 아직 남아 있습니다.
 - **nginx `add_header`**: location 안에 `add_header` 가 하나라도 있으면 server 레벨 헤더가 전부 빠집니다. 그런 location 에는 `include /etc/nginx/snippets/security-headers.conf;` 를 넣습니다.
 - **업로드**: 백엔드는 파일 내용(매직 바이트)으로 JPEG/PNG/GIF/WEBP 만 받고 확장자는 서버가 정합니다. 백엔드가 non-root(uid 1001)로 돌므로 업로드 볼륨도 uid 1001 소유여야 합니다.
 - **Swagger** 는 기본으로 꺼져 있습니다. 필요하면 `.env` 에 `SWAGGER_ENABLED=true` 를 넣고 `app` 을 다시 띄웁니다.
@@ -189,6 +213,6 @@ docker run --rm -i grafana/k6 run - < load-test.js
 | 컨테이너 재생성 뒤 502 | `docker exec moyeolog-nginx nginx -s reload` |
 | 지도가 안 뜸 | `NEXT_PUBLIC_KAKAO_MAP_API_KEY` 가 JavaScript 키인지, 바꾼 뒤 `--build` 했는지, 브라우저 콘솔의 CSP 오류 |
 | 일정 시각이 9시간 어긋남 | 프론트가 `toISOString()` 으로 보내고 있는지, 백엔드 `TZ` |
-| 이미지 업로드 실패 | 업로드 볼륨 소유자(uid 1001), 파일 형식 |
+| 이미지 업로드 실패 | 업로드 볼륨 소유자(uid 1001), 파일 형식, 10MB 초과(즉시 413 JSON) |
 | AI 분석이 "오류가 발생했습니다" | `docker compose logs app \| grep "\[AI\]"` 의 `upstream status`. 401/403 이면 `LLM_API_KEY`, 연결 실패면 `LLM_BASE_URL` 접속 여부 |
 | AI 분석이 1분쯤에서 끊김 | nginx·프론트 이미지가 최신인지, 외부 Caddy 응답 대기 시간 |

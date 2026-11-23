@@ -1,75 +1,71 @@
 # ==============================================================================
-# MOYEOLOG Automatic Backup Script (Windows PowerShell)
+# MOYEOLOG 백업 (Windows PowerShell). backup.sh 와 같은 일을 한다.
+#
+#   .\backup.ps1
+#
+# - DB: moyeolog-db 컨테이너 안에서 mysqldump | gzip → docker cp → data\backup\db-<시각>.sql.gz
+#   (PowerShell 리다이렉션은 인코딩을 바꾸므로 덤프는 컨테이너 안에서 파일로 만든 뒤 꺼낸다)
+# - 업로드: moyeolog_app_images 볼륨을 읽기 전용으로 붙여 tar → data\backup\uploads-<시각>.tar.gz
+# - 비밀번호는 명령줄에 올리지 않는다(DB 컨테이너의 MYSQL_ROOT_PASSWORD 를 컨테이너 안에서 MYSQL_PWD 로 넘긴다).
+# - 백업 폴더는 현재 사용자만 접근하도록 ACL 을 좁힌다.
+# - RetentionDays(기본 14)일이 지난 db-*.sql.gz / uploads-*.tar.gz 만 지운다.
 # ==============================================================================
+param(
+    [string]$BackupDir = (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "data\backup"),
+    [int]$RetentionDays = 14,
+    [string]$DbContainer = "moyeolog-db",
+    [string]$UploadVolume = "moyeolog_app_images",
+    [string]$TarImage = "nginx:1.25-alpine"
+)
 
 $ErrorActionPreference = "Stop"
 
-# Script directory path
-$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-Set-Location $ScriptDir
+function Log($msg) { Write-Host "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] $msg" }
+function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what 실패 (exit $LASTEXITCODE)" } }
 
-# Configurable paths
-$BackupDir = ".\data\backups"
-$DbContainerName = "moyeolog-db"
-
-# Create backup directory if it doesn't exist
 if (-not (Test-Path $BackupDir)) {
     New-Item -ItemType Directory -Path $BackupDir | Out-Null
 }
+# 현재 사용자만 접근 (상속 끊고 본인 전체 권한만)
+icacls $BackupDir /inheritance:r /grant:r "$($env:USERNAME):(OI)(CI)F" | Out-Null
 
-# Load .env file
-$EnvFile = ".\.env"
-if (Test-Path $EnvFile) {
-    Get-Content $EnvFile | ForEach-Object {
-        $line = $_.Trim()
-        if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
-            $parts = $line.Split("=", 2)
-            $key = $parts[0].Trim()
-            $value = $parts[1].Trim()
-            # Remove enclosing quotes if any
-            if ($value.StartsWith('"') -and $value.EndsWith('"')) { $value = $value.Substring(1, $value.Length - 2) }
-            if ($value.StartsWith("'") -and $value.EndsWith("'")) { $value = $value.Substring(1, $value.Length - 2) }
-            [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
-        }
-    }
-} else {
-    Write-Error "Error: .env file not found."
-    Exit 1
+$running = docker inspect -f "{{.State.Running}}" $DbContainer 2>$null
+if ($running -ne "true") { throw "DB 컨테이너 $DbContainer 가 실행 중이 아닙니다." }
+docker volume inspect $UploadVolume *> $null
+if ($LASTEXITCODE -ne 0) { throw "업로드 볼륨 $UploadVolume 이 없습니다." }
+
+$Ts = Get-Date -Format "yyyyMMdd-HHmmss"
+$DbFile = Join-Path $BackupDir "db-$Ts.sql.gz"
+$UploadFile = "uploads-$Ts.tar.gz"
+$Tmp = "/tmp/moyeolog-backup-$Ts.sql.gz"
+
+# 1. DB
+Log "DB 덤프 시작 ($DbContainer)"
+$dump = 'set -e; export MYSQL_PWD="$MYSQL_ROOT_PASSWORD"; umask 077; ' +
+        'mysqldump -uroot --single-transaction --quick --routines --triggers --events ' +
+        '--default-character-set=utf8mb4 --no-tablespaces "${MYSQL_DATABASE:-moyeolog}" > /tmp/dump.sql; ' +
+        'tail -n 1 /tmp/dump.sql | grep -q "Dump completed"; gzip -c /tmp/dump.sql > ' + $Tmp + '; rm -f /tmp/dump.sql'
+try {
+    docker exec $DbContainer sh -c $dump; Check "mysqldump"
+    docker cp "${DbContainer}:$Tmp" $DbFile; Check "docker cp"
+} finally {
+    docker exec $DbContainer rm -f $Tmp /tmp/dump.sql | Out-Null
 }
+Log "DB 덤프 완료: $DbFile"
 
-# Set default values if not defined in env
-$DbName = if ($env:MYSQL_DATABASE) { $env:MYSQL_DATABASE } else { "moyeolog" }
-$DbPass = $env:MYSQL_ROOT_PASSWORD
+# 2. 업로드 파일
+Log "업로드 볼륨 백업 시작 ($UploadVolume)"
+$absBackup = (Resolve-Path $BackupDir).Path
+docker run --rm --network none --entrypoint tar -v "${UploadVolume}:/data:ro" -v "${absBackup}:/backup" `
+    $TarImage -czf "/backup/$UploadFile" -C /data .
+Check "업로드 tar"
+Log "업로드 백업 완료: $(Join-Path $BackupDir $UploadFile)"
 
-if (-not $DbPass) {
-    Write-Error "Error: MYSQL_ROOT_PASSWORD is not set in .env."
-    Exit 1
-}
-
-$Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$TempSql = "$BackupDir\temp_db_$Timestamp.sql"
-$ArchiveFile = "$BackupDir\backup_$Timestamp.zip"
-
-Write-Host "### Starting backup process..."
-
-# 1. Database dump
-Write-Host "--> Dumping database ($DbName)..."
-docker exec $DbContainerName mysqldump -u root -p$DbPass $DbName > $TempSql
-
-# 2. Archive database dump
-Write-Host "--> Archiving files..."
-Compress-Archive -Path $TempSql -DestinationPath $ArchiveFile -Force
-
-# Clean up temporary SQL file
-Remove-Item $TempSql -Force
-
-Write-Host "--> Backup successfully saved to: $ArchiveFile"
-
-# 3. Retention policy: Remove backups older than 7 days
-Write-Host "--> Cleaning up old backups (older than 7 days)..."
-$LimitDate = (Get-Date).AddDays(-7)
-Get-ChildItem -Path $BackupDir -Filter "backup_*.zip" | Where-Object {
-    $_.LastWriteTime -lt $LimitDate
+# 3. 보존 기간이 지난 자동 백업 삭제
+Log "${RetentionDays}일 지난 백업 정리"
+$limit = (Get-Date).AddDays(-$RetentionDays)
+Get-ChildItem -Path $BackupDir -File | Where-Object {
+    ($_.Name -like "db-*.sql.gz" -or $_.Name -like "uploads-*.tar.gz") -and $_.LastWriteTime -lt $limit
 } | Remove-Item -Force
 
-Write-Host "### Backup process completed successfully!"
+Log "백업 완료"

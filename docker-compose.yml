@@ -1,6 +1,6 @@
 # 이 폴더에서: docker compose up -d --build
 # 프론트(nginx 경유): http://<서버>:3003  →  외부 프록시가 https://moyeolog.ruraeru.xyz 로 연결
-# 백엔드 직접 접근:    http://<서버>:8083
+# 백엔드 직접 접근:    http://127.0.0.1:8083 (서버 안에서만. 외부 진입은 nginx 하나)
 # TLS는 외부 프록시에서 종료한다. 이 스택은 HTTP만 다룬다.
 name: moyeolog
 
@@ -56,6 +56,8 @@ services:
       - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required}
       - JWT_EXPIRATION=${JWT_EXPIRATION:-86400000}
       - JWT_REFRESH_EXPIRATION=${JWT_REFRESH_EXPIRATION:-604800000}
+      # 리프레시 토큰 구조 개편(2026-11-12) 전에 발급된 토큰은 더 받지 않는다.
+      - JWT_ACCEPT_LEGACY_TOKENS=${JWT_ACCEPT_LEGACY_TOKENS:-false}
       # 메모·토픽 AI 분석: Ollama 서버 먼저, 실패하면 GEMINI_API_KEY 가 있을 때 Gemini
       - LLM_BASE_URL=${LLM_BASE_URL:-https://ai.ruraeru.xyz}
       - LLM_MODEL=${LLM_MODEL:-qwen3.5:9b}
@@ -70,8 +72,10 @@ services:
       # LocalDateTime(작성 시각, 일정 시각)을 한국 시간 기준으로 다룬다.
       - TZ=Asia/Seoul
       - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=50.0
+    # 127.0.0.1 에만 연다. 0.0.0.0 으로 열면 LAN·tailscale 에서 nginx 를 우회해
+    # rate limit·/api/auth/* 차단·보안 헤더 없이 백엔드에 바로 닿는다 (Docker 포트는 ufw 도 우회한다).
     ports:
-      - "${BACKEND_PORT:-8083}:8080"
+      - "127.0.0.1:${BACKEND_PORT:-8083}:8080"
     volumes:
       - app_images:/app/uploads
     networks:
@@ -130,8 +134,10 @@ services:
     image: nginx:1.25-alpine
     container_name: moyeolog-nginx
     restart: unless-stopped
+    # 외부 Caddy(172.30.1.10)가 다른 호스트라 LAN 에 열어야 한다.
+    # 특정 인터페이스로만 열려면 .env 에 FRONTEND_BIND=<이 서버 LAN IP>.
     ports:
-      - "${FRONTEND_PORT:-3003}:80"
+      - "${FRONTEND_BIND:-0.0.0.0}:${FRONTEND_PORT:-3003}:80"
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro

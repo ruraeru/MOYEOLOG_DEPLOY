@@ -11,12 +11,13 @@
 ```
 외부 Caddy(TLS, 172.30.1.10) ─ moyeolog.ruraeru.xyz ─▶ 이 서버 :3003 ─▶ nginx ─┬─ /api, /uploads ─▶ app:8080 (Spring Boot)
                                                                               └─ /api/auth, /api/search-image, /api/proxy-image, 그 외 ─▶ frontend:3000 (Next.js)
-                                                        이 서버 :8083 ─▶ app:8080 (백엔드 직접 접근)
+                                                        127.0.0.1:8083 ─▶ app:8080 (서버 안에서만 백엔드 직접 접근)
 ```
 
 - TLS는 외부 Caddy가 종료한다. 이 스택은 HTTP만 다룬다 (certbot 없음).
 - 3003은 프론트 컨테이너가 아니라 nginx다. 브라우저가 같은 도메인의 `/api` 를 호출하므로 nginx가 경로로 나눈다.
 - 같은 서버에 다른 프로젝트가 3000~3002, 8080~8082 를 쓰고 있다.
+- 8083 은 `127.0.0.1` 에만 연다(LAN·tailscale 에서 nginx 를 우회하지 못하게). 3003 은 Caddy 가 다른 호스트라 LAN 에 열어 둔다(`FRONTEND_BIND` 로 좁힐 수 있음).
 - 컨테이너: `moyeolog-nginx`, `moyeolog-frontend`, `moyeolog-app`, `moyeolog-db` (MySQL 8.0). compose 프로젝트 이름은 `moyeolog`.
 
 ## 실행
@@ -33,19 +34,24 @@ docker compose up -d --build
   - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 64개)
   - 프론트 타입 검사: `node:20-alpine` 컨테이너에서 `npm ci && npx tsc --noEmit`
 - DB 접속: `docker exec moyeolog-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" moyeolog'`
-- 백업: `backup.sh`. 수동 덤프는 `data/backup/` (gitignore 대상).
+- 백업: `backup.sh` (DB + 업로드 볼륨 → `data/backup/`, 14일 보존, 권한 600). 주기 실행은 README '백업' 절의 crontab 한 줄을 등록해야 한다. 수동 덤프도 `data/backup/` (gitignore 대상).
 
 ## 꼭 알아야 할 것
 
 - **백엔드에 `application.yml` 이 없다** (gitignore). 운영 설정은 전부 `docker-compose.yml` 의 환경변수로 들어간다. 새 프로퍼티는 `@Value` 기본값을 주고 `application.yml.example` 과 compose 에 추가한다.
-- **`INTERNAL_API_SECRET`**: 프론트 서버(NextAuth)가 백엔드 `POST /api/auth/sync` 를 부를 때 `X-Internal-Secret` 헤더로 보낸다. 프론트·백엔드 컨테이너에 같은 값이 있어야 로그인이 된다. nginx 는 `/api/auth/sync`, `/api/auth/refresh` 를 외부에 404 로 막는다.
+- **`INTERNAL_API_SECRET`**: 프론트 서버(NextAuth)가 백엔드 `POST /api/auth/sync`·`POST /api/auth/logout` 을 부를 때 `X-Internal-Secret` 헤더로 보낸다. 프론트·백엔드 컨테이너에 같은 값이 있어야 로그인이 된다. nginx 는 `/api/auth/sync`, `/api/auth/refresh`, `/api/auth/logout` 을 외부에 404 로 막는다.
+- **계정 연결**: 로그인은 kakaoId 로 찾는다. 못 찾으면 Kakao 가 '검증됨'으로 넘긴 이메일이고, 그 이메일의 기존 계정이 아직 한 번도 연결되지 않았을 때(`users.kakao_linked_at IS NULL`)만 그 계정에 붙인다(Kakao 앱 교체 때 기존 사용자 이전용). 그 밖에는 새 계정.
+- **토큰**: 로그아웃하면 그 기기의 리프레시 토큰을 지우고 액세스 토큰 jti 를 만료까지 거부한다(`revoked_access_tokens`). '모든 기기 로그아웃'은 `users.tokens_valid_after` 이전 토큰을 거부. `exp` 없는 토큰·typ 없는 예전 토큰은 거부(`JWT_ACCEPT_LEGACY_TOKENS` 기본 false).
 - **시간**: 일정 시각과 작성 시각은 오프셋 없는 한국 시간 `LocalDateTime` 이다. 백엔드 컨테이너는 `TZ=Asia/Seoul`. 프론트는 `yyyy-MM-dd'T'HH:mm:ss` 로 보낸다 (`toISOString()` 금지).
 - **스키마**: `ddl-auto=update`. Hibernate 는 기존 컬럼 타입을 바꾸지 않으므로 타입 변경은 직접 `ALTER TABLE` 해야 한다.
 - **nginx `add_header`**: location 안에 `add_header` 가 하나라도 있으면 server 레벨 헤더가 전부 빠진다. 그런 location 에는 `include /etc/nginx/snippets/security-headers.conf;` 를 넣는다.
+- **nginx snippets**: `proxy.conf`(공통 프록시 헤더 + 백엔드·프론트가 보내는 보안 헤더 숨김 → 중복 없이 nginx 것 하나만), `json-errors.conf`(nginx 가 만드는 413·429 를 JSON 으로). 본문 한도는 10m(백엔드와 같음) — 넘으면 바로 JSON 413. `/_next/image` 에도 별도 rate limit.
 - **신뢰 프록시**: `set_real_ip_from 172.30.1.10` (Caddy) 하나만 신뢰한다. Caddy 주소가 바뀌면 nginx 접속 로그의 `peer=` 값을 보고 고친다. 범위를 넓히면 `X-Forwarded-For` 조작으로 rate limit 이 우회된다.
 - **CSP**: `nginx/conf.d/default.conf` 에 있다. Kakao 지도 SDK 는 `*.kakaocdn.net` 에서 스크립트를 받는다. 외부 리소스를 추가하면 CSP 도 고친다.
 - **업로드**: 백엔드가 파일 내용(매직 바이트)으로 JPEG/PNG/GIF/WEBP 만 받고 확장자는 서버가 정한다. nginx 는 `/uploads/` 에서 이미지 확장자만 이미지로 내려주고 나머지는 다운로드로 처리한다. 업로드 볼륨은 uid 1001 소유여야 한다 (백엔드가 non-root 로 실행).
-- **AI 분석**: 기본은 Ollama 호환 서버(`LLM_BASE_URL`, 기본 `https://ai.ruraeru.xyz`)의 `/api/chat`, 토큰은 `LLM_API_KEY`. Ollama 가 실패(연결·150초 초과·HTTP 오류·형식 오류)하면 `GEMINI_API_KEY` 가 있을 때 Gemini 로 다시 보낸다. 구현은 `GeminiService` 한 곳(이름은 그대로). 분석 요청만 nginx·axios 타임아웃 300초.
+- **알림·메시지**: 백엔드 `notification/`, `message/` 패키지. 다른 서비스는 `event/NotificationEvent` 를 발행만 하고, 리스너가 커밋 뒤 받는 사람 설정을 확인해 저장한다. 메시지는 친구끼리 1:1, 프론트는 5초(대화)·30초(배지) 폴링.
+- **회원 탈퇴**: `UserDeletingEvent` 를 동기 발행하면 각 서비스의 리스너가 자기 데이터를 지운다. 방장인 모임은 가장 오래된 멤버에게 넘기고 혼자면 삭제. 새 데이터를 추가하면 그 서비스에도 리스너를 둔다.
+- **AI 분석**: 기본은 Ollama 호환 서버(`LLM_BASE_URL`, 기본 `https://ai.ruraeru.xyz`)의 `/api/chat`, 토큰은 `LLM_API_KEY`. Ollama 가 실패(연결·150초 초과·HTTP 오류·형식 오류)하면 `GEMINI_API_KEY` 가 있을 때 Gemini 로 다시 보낸다. 구현은 `GeminiService` 한 곳(이름은 그대로). 분석 요청만 nginx·axios 타임아웃 300초. LLM 을 기다리는 동안 DB 트랜잭션을 잡지 않고(`AiAnalysisSupport`), 같은 대상 분석 중이면 409.
 - **Swagger**: 기본으로 꺼져 있다. 필요하면 `.env` 에 `SWAGGER_ENABLED=true`.
 - **Kakao 키**: REST API 키(`KAKAO_CLIENT_ID`), Client Secret, JavaScript 키(`NEXT_PUBLIC_KAKAO_MAP_API_KEY`) 는 모두 같은 Kakao 앱의 것이어야 하고, 그 앱에 사이트 도메인과 Redirect URI `https://moyeolog.ruraeru.xyz/api/auth/callback/kakao` 가 등록돼 있어야 한다.
 - **git**: 이 서버에는 전역 git 사용자 설정이 없다. 커밋은 `git -c user.name=ruraeru -c user.email=f93335383@gmail.com commit ...` 으로 했다. 푸시는 `gh auth login` 으로 인증돼 있다. 서브모듈을 먼저 푸시하고 배포 레포를 푸시한다.
@@ -66,12 +72,20 @@ docker compose up -d --build
 
 FE PR #3 (`design/unslop`) 머지 후 배포. 디자인 토큰은 `MOYEOLOG_FE/src/app/globals.css` 에 있다: 표면 `bg-canvas/surface/raised`, 글자 `text-ink/ink-2/ink-3`, 선 `border-line`, 강조 `bg-accent`(잉크 남색 #2f4fb5, 화면당 몇 군데만), 컴포넌트 `.btn-primary/secondary/ghost` `.form-input` `.card`, 날짜·시각은 `.stamp` + date-fns `'M.d EEE HH:mm'`(ko). 새 화면도 이 토큰을 쓰고 indigo/gray 같은 Tailwind 기본색, `font-bold` 이상, `uppercase`, `transition-all` 은 쓰지 않는다. 라이트 모드 전용. 모임별 색은 `lib/constants.ts` 의 `THEME_COLORS` (점은 `.dot`).
 
+## 2차 QA 와 수정 (2026-11-22)
+
+- QA: 운영과 같은 이미지의 격리 스택(`/home/ruraeru/moyeolog-qa/`, compose 프로젝트 `moyeolog-qa`, 127.0.0.1:3093/3094/8093)에서 에이전트 12개가 567건 실행 → 실패 191건. 결과 JSON `results/`, Figma QA 시트 2차 프레임.
+- 수정: 에이전트 12개가 영역별 worktree(`/home/ruraeru/moyeolog-fix/`)에서 고치고, 통합 브랜치 `fix/qa2`(BE·FE)·`fix/qa2-ops`(배포 레포)로 합쳤다. API 계약은 `/home/ruraeru/moyeolog-fix/CONTRACTS.md`.
+- 재검증: 실패 191건 전부 재실행 → 실패 0(Kakao 로그인·지도·localhost 이미지 최적화 보류 11). 결과 `results-r2/`.
+- 새 기능: 알림(종류별 설정), 친구 1:1 메시지, 다른 사용자 프로필, 도움말, 설정 4개 메뉴(알림·계정 및 보안·화면·언어 및 지역), 일정 주·목록 보기·종료 시각, 댓글 수정, 모임 나가기·삭제·초대 모달·초대 링크 확인 화면.
+- 배포 순서(운영): ① `backup.sh` ② 기존 앱 중지 ③ `migrations/2026-11-22-qa2/pre-deploy.sql` ④ `docker compose up -d --build`(포트 바인딩이 바뀌어 nginx·app 재생성 필요) ⑤ `post-deploy.sql` ⑥ 로그에서 `[topic-image-migration]` 확인 ⑦ crontab 등록.
+- 운영 서버 메모리(11GB)가 작다: 에이전트·Playwright 를 12개 동시에 돌리면 서버가 다운된다(2026-11-22). 6개 이하로, 브라우저는 동시 2개 이하로.
+
 ## 남은 일
 
 - 고치지 않은 것: customId 변경 기능, 토픽 이미지가 base64 로 DB 에 저장되는 구조, robots/OG 태그, 공유 해제·모임 나가기·모임 삭제 화면, 모임 초대를 보내는 화면(`GroupInviteModal` 이 어디에도 연결돼 있지 않음), 프론트 lint 오류 1건(`AlertContainer.tsx`, 기존 문제).
 - 확인하지 못한 것: 실제 Kakao 로그인 완료 흐름과 브라우저 화면 동작(자동화 브라우저 스크린샷으로 홈·메모·설정 렌더링만 확인), 8083/3003 포트가 외부 인터넷에서 직접 닿는지.
 - 대화에 평문으로 올라온 키(Gemini, Kakao Client Secret, Kakao 어드민 키)는 재발급 권장.
-- `JWT_ACCEPT_LEGACY_TOKENS` 는 기본 true (배포 전 발급된 토큰 허용). 2026-11-19 이후 false 로 바꿔도 된다.
 
 ## 시연 영상 (2차 완성, 2026-11-12)
 
