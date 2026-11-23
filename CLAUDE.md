@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14) 은 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
 
 ## 구조
 
@@ -31,10 +31,10 @@ docker compose up -d --build
 - `NEXT_PUBLIC_*` 값은 프론트 빌드 시점에 번들에 들어간다. 바꾸면 `--build` 로 다시 빌드해야 한다.
 - 프론트/백엔드 컨테이너를 재생성한 뒤에는 `docker exec moyeolog-nginx nginx -s reload` 를 한다 (upstream IP 갱신).
 - 호스트에 node, JDK 가 없다. 검증은 Docker 로 한다.
-  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 64개)
+  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 144개)
   - 프론트 타입 검사: `node:20-alpine` 컨테이너에서 `npm ci && npx tsc --noEmit`
 - DB 접속: `docker exec moyeolog-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" moyeolog'`
-- 백업: `backup.sh` (DB + 업로드 볼륨 → `data/backup/`, 14일 보존, 권한 600). 주기 실행은 README '백업' 절의 crontab 한 줄을 등록해야 한다. 수동 덤프도 `data/backup/` (gitignore 대상).
+- 백업: `backup.sh` (DB + 업로드 볼륨 → `data/backup/`, 14일 보존, 권한 600). 매일 04:00 crontab 으로 돈다(2026-11-23 등록, 로그 `data/backup/backup.log`). 수동 덤프도 `data/backup/` (gitignore 대상).
 
 ## 꼭 알아야 할 것
 
@@ -64,7 +64,7 @@ docker compose up -d --build
    - 보안: `/api/auth/sync` 무인증 계정 탈취, 이미지 프록시 SSRF, 업로드 저장형 XSS, 그룹 비멤버의 메모·일정 읽기/쓰기, rate limit 우회, 보안 헤더 누락.
    - 기능: 설정 페이지 401, 일정 9시간 밀림, 토큰 갱신 후 401 고착, 초대 중복 수락, 이메일 없는 친구 초대 500, 긴 메모 저장 실패, 초대 링크 로그인 후 유실.
    - 권한·설계: 공유받은 메모 읽기 전용, 사용자별 즐겨찾기, 그룹 수정 방장 전용, 오류 응답을 500 대신 4xx 로, 리프레시 토큰 구조 개편.
-   - 추가된 API: `DELETE /api/memos/{id}/share/{targetUserId}`, `DELETE /api/groups/{id}/members/me`, `DELETE /api/groups/{id}`. 프론트 화면은 아직 없다.
+   - 추가된 API: `DELETE /api/memos/{id}/share/{targetUserId}`, `DELETE /api/groups/{id}/members/me`, `DELETE /api/groups/{id}`. 화면은 2차 QA 때 붙였다.
 4. **배포와 재검증**: DB·업로드 백업 후 QA 테스트 데이터 삭제, 컬럼 타입 변경, 새 이미지 배포. QA 에서 재현됐던 항목을 같은 요청으로 다시 확인해 통과.
 5. **커밋·푸시·머지**: 세 레포 `fix/qa-findings` → `main` (BE #1, FE #2, DEPLOY #1). 서브모듈 포인터는 각 레포 `main` 의 머지 커밋.
 
@@ -74,17 +74,19 @@ FE PR #3 (`design/unslop`) 머지 후 배포. 디자인 토큰은 `MOYEOLOG_FE/s
 
 ## 2차 QA 와 수정 (2026-11-22)
 
-- QA: 운영과 같은 이미지의 격리 스택(`/home/ruraeru/moyeolog-qa/`, compose 프로젝트 `moyeolog-qa`, 127.0.0.1:3093/3094/8093)에서 에이전트 12개가 567건 실행 → 실패 191건. 결과 JSON `results/`, Figma QA 시트 2차 프레임.
-- 수정: 에이전트 12개가 영역별 worktree(`/home/ruraeru/moyeolog-fix/`)에서 고치고, 통합 브랜치 `fix/qa2`(BE·FE)·`fix/qa2-ops`(배포 레포)로 합쳤다. API 계약은 `/home/ruraeru/moyeolog-fix/CONTRACTS.md`.
+- QA: 운영과 같은 이미지의 격리 스택(`/home/ruraeru/moyeolog-qa/`, compose 프로젝트 `moyeolog-qa`, 127.0.0.1:3093/3094/8093)에서 에이전트 12개가 567건 실행 → 실패 191건. 결과 JSON `results/`, Figma QA 시트 2차 프레임. 스택은 배포 뒤 내렸다(`docker compose down`, 볼륨 유지). 다시 쓰려면 그 폴더에서 `docker compose up -d`.
+- 수정: 에이전트 12개가 영역별 worktree(`/home/ruraeru/moyeolog-fix/`)에서 고치고, 세 레포의 `fix/qa2` 브랜치로 합쳤다. API 계약은 `/home/ruraeru/moyeolog-fix/CONTRACTS.md`.
 - 재검증: 실패 191건 전부 재실행 → 실패 0(Kakao 로그인·지도·localhost 이미지 최적화 보류 11). 결과 `results-r2/`.
 - 새 기능: 알림(종류별 설정), 친구 1:1 메시지, 다른 사용자 프로필, 도움말, 설정 4개 메뉴(알림·계정 및 보안·화면·언어 및 지역), 일정 주·목록 보기·종료 시각, 댓글 수정, 모임 나가기·삭제·초대 모달·초대 링크 확인 화면.
-- 배포 순서(운영): ① `backup.sh` ② 기존 앱 중지 ③ `migrations/2026-11-22-qa2/pre-deploy.sql` ④ `docker compose up -d --build`(포트 바인딩이 바뀌어 nginx·app 재생성 필요) ⑤ `post-deploy.sql` ⑥ 로그에서 `[topic-image-migration]` 확인 ⑦ crontab 등록.
+- 배포(2026-11-23): PR BE #3, FE #5, DEPLOY #6 머지 후 운영 반영. 직전 백업 `data/backup/db-20261123-051450.sql.gz`·`uploads-20261123-051450.tar.gz`. 실제 Kakao 로그인으로 운영 동작 확인.
+- 배포 순서(이대로 했다): ① `backup.sh` ② 기존 앱 중지 ③ `migrations/2026-11-22-qa2/pre-deploy.sql` ④ `docker compose up -d --build`(포트 바인딩이 바뀌어 nginx·app 재생성 필요) ⑤ `post-deploy.sql` ⑥ 로그에서 `[topic-image-migration]` 확인 ⑦ crontab 등록.
 - 운영 서버 메모리(11GB)가 작다: 에이전트·Playwright 를 12개 동시에 돌리면 서버가 다운된다(2026-11-22). 6개 이하로, 브라우저는 동시 2개 이하로.
 
 ## 남은 일
 
-- 고치지 않은 것: customId 변경 기능, 토픽 이미지가 base64 로 DB 에 저장되는 구조, robots/OG 태그, 공유 해제·모임 나가기·모임 삭제 화면, 모임 초대를 보내는 화면(`GroupInviteModal` 이 어디에도 연결돼 있지 않음), 프론트 lint 오류 1건(`AlertContainer.tsx`, 기존 문제).
-- 확인하지 못한 것: 실제 Kakao 로그인 완료 흐름과 브라우저 화면 동작(자동화 브라우저 스크린샷으로 홈·메모·설정 렌더링만 확인), 8083/3003 포트가 외부 인터넷에서 직접 닿는지.
+- 고치지 않은 것: customId 변경 기능, robots/OG 태그, 앱 전체 영어 번역('언어 및 지역'은 12/24시간 표시만), CSP 의 `'unsafe-eval'`(Kakao 지도 SDK 가 필요한지 확인 못 함).
+- 알고 있는 한계: 친구 삭제와 메모 공유가 동시에 오면, 또는 같은 초대를 동시에 두 번 보내면 409(다시 시도하면 됨). `/memo` 는 모임마다 요청을 하나씩 보내 모임이 아주 많으면 rate limit 에 가깝다. 폴링 주기 메시지 5초·토픽 10초·모임 화면 15초·배지 30초. 댓글 멘션을 고른 뒤 입력창으로 포커스가 돌아가지 않는다. 모바일 하단 탭이 7칸.
+- 확인하지 못한 것: 3003 포트가 외부 인터넷에서 직접 닿는지(8083 은 127.0.0.1 전용이라 LAN 에서도 안 닿는 것 확인).
 - 대화에 평문으로 올라온 키(Gemini, Kakao Client Secret, Kakao 어드민 키)는 재발급 권장.
 
 ## 시연 영상 (2차 완성, 2026-11-12)
