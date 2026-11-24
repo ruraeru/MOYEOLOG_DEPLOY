@@ -30,7 +30,7 @@ docker compose up -d --build
 
 - `NEXT_PUBLIC_*` 값은 프론트 빌드 시점에 번들에 들어간다. 바꾸면 `--build` 로 다시 빌드해야 한다.
 - 프론트/백엔드 컨테이너를 재생성한 뒤에는 `docker exec moyeolog-nginx nginx -s reload` 를 한다 (upstream IP 갱신).
-- 호스트에 node, JDK 가 없다. 검증은 Docker 로 한다.
+- 호스트에 JDK 가 없다. node 는 Claude Code 플러그인 훅용으로 `~/.local/opt` 에 22 가 있을 뿐이다(2026-11-24). 검증은 Docker 로 한다.
   - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 144개)
   - 프론트 타입 검사: `node:20-alpine` 컨테이너에서 `npm ci && npx tsc --noEmit`
 - DB 접속: `docker exec moyeolog-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" moyeolog'`
