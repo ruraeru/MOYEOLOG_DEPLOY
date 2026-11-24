@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
 
 ## 구조
 
@@ -83,13 +83,17 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **컴포넌트**
   - 버튼은 `.btn-primary/secondary/ghost/danger`(높이 36), `.btn-sm`, `.btn-icon`. 그 밖에 `.form-input`(흰 바탕 + 실선), `.card`, `.chip`.
   - 공통 부품은 `components/ui.tsx` 에 있다: `PageHeader`, `Ribbon`, `Dot`, `UnderlineTabs`, `Segmented`, `EmptyState`, `Modal`, `SideLabel`, `SideItem`. 새 화면도 이것을 쓴다.
+- **모임 얼굴** (FE PR #7, BE PR #4, 2026-11-24): 모임 수정에서 바꾼 사진·색이 화면에 보이게 했다
+  - `components/groups/GroupIdentity.tsx`: `GroupCover`(배경 사진 표지, 없으면 모임 색 옅은 줄무늬), `GroupAvatar`(프로필 사진, 둥근 사각형, 없으면 모임 색 바탕 + 첫 글자), `groupStyle(theme)`.
+  - 모임 화면 루트에 `style={groupStyle(group.colorTheme)}` 를 깔면 그 안에서 `bg-group`(모임 색), `text-group-ink`(글자용 진한 톤), `bg-group-wash`/`bg-group-soft`(옅은 바탕), `text-group-sel`(선택 글자)이 모임 색이 된다. 루트 밖에서는 기본색(주황·갈색·raised·ink)으로 돌아간다. 모임 달력은 `.group-cal`(globals.css).
+  - 사진 지우기: `PUT /api/groups/{id}` 의 `group` JSON 에 `removeProfileImage`·`removeBackgroundImage`. 새 파일이 오면 새 파일이 이긴다.
 - **규칙**
-  - 모임 색(`lib/constants.ts` 의 `THEME_COLORS`, `getThemeColors(theme).hex`)은 띠·점으로만 쓴다. 배경을 칠하지 않는다.
+  - 모임 색(`lib/constants.ts` 의 `THEME_COLORS`, `hex`·`ink`)은 모임 화면 안에서는 표시(탭 밑줄, 띠, 오늘·선택, 태그 선택, 표지)에 쓴다. 카드·페이지 전체를 칠하지 않고, 모임 색 위에 흰 글자를 올리지 않는다(노랑·하늘색 대비 부족). 모임 밖 화면에서는 띠·점 + 작은 `GroupAvatar` 로 구분한다.
   - 만들기 버튼은 화면 머리 오른쪽에 하나만 두고, FAB 는 쓰지 않는다.
   - 상단 메뉴는 6칸이다. 설정은 프로필 메뉴에 있다.
   - 모바일 하단 탭은 5칸이다. 메시지·알림은 위쪽 아이콘이다.
   - Tailwind 기본색(indigo/gray 등), `font-bold` 이상, `uppercase`, `transition-all`, 그라데이션, 이모지는 쓰지 않는다. 라이트 모드 전용이다.
-- **되돌리기**: 배포 직전 운영 프론트 이미지를 `moyeolog-frontend:before-ui-20261124` 로 남겨 뒀다.
+- **되돌리기**: 배포 직전 운영 프론트 이미지를 `moyeolog-frontend:before-ui-20261124` 로 남겨 뒀다. 모임 얼굴 배포 직전 이미지는 `moyeolog-{frontend,app}:before-gi-20261124`, 백업 `data/backup/db-20261124-131227.sql.gz`.
 
 ## 2차 QA 와 수정 (2026-11-22)
 
