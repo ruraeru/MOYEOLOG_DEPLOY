@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
 
 ## 구조
 
@@ -68,9 +68,28 @@ docker compose up -d --build
 4. **배포와 재검증**: DB·업로드 백업 후 QA 테스트 데이터 삭제, 컬럼 타입 변경, 새 이미지 배포. QA 에서 재현됐던 항목을 같은 요청으로 다시 확인해 통과.
 5. **커밋·푸시·머지**: 세 레포 `fix/qa-findings` → `main` (BE #1, FE #2, DEPLOY #1). 서브모듈 포인터는 각 레포 `main` 의 머지 커밋.
 
-## 화면 디자인 정리 (2026-11-14)
+## 화면 디자인 (캠핑 테마, 2026-11-24)
 
-FE PR #3 (`design/unslop`) 머지 후 배포. 디자인 토큰은 `MOYEOLOG_FE/src/app/globals.css` 에 있다: 표면 `bg-canvas/surface/raised`, 글자 `text-ink/ink-2/ink-3`, 선 `border-line`, 강조 `bg-accent`(잉크 남색 #2f4fb5, 화면당 몇 군데만), 컴포넌트 `.btn-primary/secondary/ghost` `.form-input` `.card`, 날짜·시각은 `.stamp` + date-fns `'M.d EEE HH:mm'`(ko). 새 화면도 이 토큰을 쓰고 indigo/gray 같은 Tailwind 기본색, `font-bold` 이상, `uppercase`, `transition-all` 은 쓰지 않는다. 라이트 모드 전용. 모임별 색은 `lib/constants.ts` 의 `THEME_COLORS` (점은 `.dot`).
+FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다. Figma 파일 `Xhzk5hq5IlBcQsoi46Fo3r` 의 페이지 "UI 시안 (2026-11-23)" 맨 아래 '캠핑 테마 · 전체 화면'이 기준 시안이다.
+
+- **토큰** (`MOYEOLOG_FE/src/app/globals.css`)
+  - 표면 `bg-canvas/surface/raised`, 글자 `text-ink/ink-2/ink-3`, 선 `border-line(-strong)`.
+  - `bg-accent`(나무 갈색 #573c2d): 만들기·저장 버튼, 내가 보낸 메시지, 강조 글자에 쓴다.
+  - `bg-mark`(주황 #fe804d): 오늘, 선택 탭 밑줄, 안 읽음 점·배지, 로고 띠에만 쓴다. **글자색으로 쓰지 않는다.**
+  - `bg-accent-soft`: 선택 바탕.
+- **글꼴**
+  - 제목·날짜 머리·항목 제목·선택 탭·로고는 `font-display`(Jua)다. `next/font/google` 로 빌드 때 받아 자체 호스팅하므로 CSP 를 바꾸지 않아도 된다. 빌드에는 네트워크가 필요하다.
+  - 본문은 Pretendard(jsDelivr), 숫자·시각은 `.stamp`(Pretendard Medium 고정폭)다. 주아에는 굵기를 주지 않는다.
+- **컴포넌트**
+  - 버튼은 `.btn-primary/secondary/ghost/danger`(높이 36), `.btn-sm`, `.btn-icon`. 그 밖에 `.form-input`(흰 바탕 + 실선), `.card`, `.chip`.
+  - 공통 부품은 `components/ui.tsx` 에 있다: `PageHeader`, `Ribbon`, `Dot`, `UnderlineTabs`, `Segmented`, `EmptyState`, `Modal`, `SideLabel`, `SideItem`. 새 화면도 이것을 쓴다.
+- **규칙**
+  - 모임 색(`lib/constants.ts` 의 `THEME_COLORS`, `getThemeColors(theme).hex`)은 띠·점으로만 쓴다. 배경을 칠하지 않는다.
+  - 만들기 버튼은 화면 머리 오른쪽에 하나만 두고, FAB 는 쓰지 않는다.
+  - 상단 메뉴는 6칸이다. 설정은 프로필 메뉴에 있다.
+  - 모바일 하단 탭은 5칸이다. 메시지·알림은 위쪽 아이콘이다.
+  - Tailwind 기본색(indigo/gray 등), `font-bold` 이상, `uppercase`, `transition-all`, 그라데이션, 이모지는 쓰지 않는다. 라이트 모드 전용이다.
+- **되돌리기**: 배포 직전 운영 프론트 이미지를 `moyeolog-frontend:before-ui-20261124` 로 남겨 뒀다.
 
 ## 2차 QA 와 수정 (2026-11-22)
 
@@ -85,7 +104,7 @@ FE PR #3 (`design/unslop`) 머지 후 배포. 디자인 토큰은 `MOYEOLOG_FE/s
 ## 남은 일
 
 - 고치지 않은 것: customId 변경 기능, robots/OG 태그, 앱 전체 영어 번역('언어 및 지역'은 12/24시간 표시만), CSP 의 `'unsafe-eval'`(Kakao 지도 SDK 가 필요한지 확인 못 함).
-- 알고 있는 한계: 친구 삭제와 메모 공유가 동시에 오면, 또는 같은 초대를 동시에 두 번 보내면 409(다시 시도하면 됨). `/memo` 는 모임마다 요청을 하나씩 보내 모임이 아주 많으면 rate limit 에 가깝다. 폴링 주기 메시지 5초·토픽 10초·모임 화면 15초·배지 30초. 댓글 멘션을 고른 뒤 입력창으로 포커스가 돌아가지 않는다. 모바일 하단 탭이 7칸.
+- 알고 있는 한계: 친구 삭제와 메모 공유가 동시에 오면, 또는 같은 초대를 동시에 두 번 보내면 409(다시 시도하면 됨). `/memo` 는 모임마다 요청을 하나씩 보내 모임이 아주 많으면 rate limit 에 가깝다. 폴링 주기 메시지 5초·토픽 10초·모임 화면 15초·배지 30초. 댓글 멘션을 고른 뒤 입력창으로 포커스가 돌아가지 않는다.
 - 확인하지 못한 것: 3003 포트가 외부 인터넷에서 직접 닿는지(8083 은 127.0.0.1 전용이라 LAN 에서도 안 닿는 것 확인).
 - 대화에 평문으로 올라온 키(Gemini, Kakao Client Secret, Kakao 어드민 키)는 재발급 권장.
 
