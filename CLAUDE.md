@@ -153,7 +153,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **알고 있는 한계**: 가운데는 좌표 평균이지 이동 시간 기준이 아니다. 두 명일 때는 가운데와 내 출발지로 상대 위치를 대략 짐작할 수 있다.
 - **PR**: BE #6·#8·#9, FE #14·#16·#19·#20·#21·#22·#23·#25. 작업 worktree `/home/ruraeru/moyeolog-midpoint/{be,fe}`. 되돌리기 이미지 `moyeolog-{app,frontend}:before-midpoint-20261125`, 백업 `data/backup/db-20261125-093541.sql.gz`.
 
-## 실시간 갱신 (SSE, feat/live-refresh, 2026-11-25)
+## 실시간 갱신 (SSE, feat/live-refresh, 2026-11-25 운영 배포)
 
 다른 사람이 만든 변경(일정·메모·친구·모임·토픽·메시지·알림)이 새로고침 없이 1초 안에 뜬다. WebSocket 이 아니라 SSE 다(서버 → 브라우저 한 방향, Caddy → nginx → Spring 을 그대로 통과).
 
@@ -168,6 +168,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **QA**: `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.live.yml`(ea → wx → live 순서로 붙임). `./pw.sh node scripts/live-ui.js --restart`(화면, 14건: 반영 0.3~0.9초, 탭 숨김·복귀, 백엔드 재시작 뒤 재접속. 재시작은 `state/live-restart.flag` 가 생기면 바깥에서 `docker restart moyeolog-qa-app` 후 지운다), `scripts/live-wire.js`(스트림 직접 확인 7건: 모임 ID 누출 없음, 연결 상한). **열린 SSE 때문에 Playwright `networkidle` 은 오지 않는다. `domcontentloaded` + `/api/events` 응답 대기를 쓴다.**
 - **PR**: BE #11, FE #26. 작업 worktree `/home/ruraeru/moyeolog-fix/live-{be,fe,deploy}`, 지시서·보고서 `LIVE_BRIEF.md`·`LIVE_REVIEW.md`·`LIVE_REPORT_{BE,FE}.md`(같은 폴더).
 - **배포 순서**: ① `backup.sh` ② `docker compose up -d --build`(백엔드·프론트 같이) ③ `docker exec moyeolog-nginx nginx -t && docker exec moyeolog-nginx nginx -s reload`(**필수**: 새 location·limit zone) ④ 도메인에서 `curl -sN -H "Authorization: Bearer <토큰>" https://moyeolog.ruraeru.xyz/api/events` 로 `event:ready` 와 25초 `: ping` 확인(Caddy 경유 버퍼링). 마이그레이션·새 환경변수 없음.
+- **배포(2026-11-25)**: BE #11, FE #26, DEPLOY #25 머지 후 백엔드·프론트를 같이 올리고 nginx reload 했다. 직전 백업 `data/backup/db-20261125-111235.sql.gz`·`uploads-20261125-111235.tar.gz`, 되돌리기 이미지 `moyeolog-{app,frontend}:before-live-20261125`(nginx 설정은 `location = /api/events` 를 남겨 둬도 옛 백엔드에서 404 일 뿐이다). 확인한 것: 컨테이너 정상, 도메인에서 토큰 없는 `/api/events` 401 JSON, 보안 헤더 유지. **확인하지 못한 것: 로그인한 실제 연결이 Caddy 를 거쳐 버퍼링 없이 오는지.** nginx 로그에서 `/api/events` 200 의 `rt=` 가 60초 안팎으로 반복되면 Caddy 가 버퍼링하는 것이다(프론트가 60초 무응답으로 끊고 다시 붙는 모양). 정상이면 탭을 숨기거나 30분이 될 때까지 이어진다.
 - **알고 있는 한계**: 닉네임·프로필 사진, AI 분석 결과, 메모 변경으로 바뀌는 '일정에 연결된 메모', 대화 지우기(내 쪽만)는 실시간으로 가지 않는다. 일정 상세 모달·메모 상세는 열려 있는 동안 내용이 바로 바뀌지 않는다(목록은 바뀐다). 끊긴 동안의 이벤트는 다시 보내지 않고 재접속 뒤 전체 새로 고침으로 메운다. 한 IP 뒤에서 30탭을 넘으면 그 뒤 탭은 429 → 폴링으로 돈다.
 
 ## 2차 QA 와 수정 (2026-11-22)
