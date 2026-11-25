@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24), `feat/email-auth`·FE `feat/login-fold`(2026-11-25), `feat/weather`(2026-11-25), FE 로고(`feat/logo-s6`·`feat/logo-s11`·`feat/logo-s11-mark`)·`fix/login-landing-home`(2026-11-25), FE·BE `feat/midpoint`(2026-11-25) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24), `feat/email-auth`·FE `feat/login-fold`(2026-11-25), `feat/weather`(2026-11-25), FE 로고(`feat/logo-s6`·`feat/logo-s11`·`feat/logo-s11-mark`)·`fix/login-landing-home`(2026-11-25), FE·BE `feat/midpoint`(2026-11-25) 는 PR 로 머지했다(merge commit). 머지된 브랜치는 2026-11-25 에 로컬·원격 모두 지웠고 `main` 만 남아 있다(커밋은 `main` 의 머지 커밋에 있다). `/home/ruraeru/moyeolog-fix/` 의 worktree 는 브랜치 없이 같은 커밋에 남겨 뒀다(QA 덧붙이기 파일이 빌드 원본으로 쓴다). 실서비스는 `main` 과 같은 코드로 돌고 있다.
 
 ## 구조
 
@@ -170,6 +170,17 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **배포 순서**: ① `backup.sh` ② `docker compose up -d --build`(백엔드·프론트 같이) ③ `docker exec moyeolog-nginx nginx -t && docker exec moyeolog-nginx nginx -s reload`(**필수**: 새 location·limit zone) ④ 도메인에서 `curl -sN -H "Authorization: Bearer <토큰>" https://moyeolog.ruraeru.xyz/api/events` 로 `event:ready` 와 25초 `: ping` 확인(Caddy 경유 버퍼링). 마이그레이션·새 환경변수 없음.
 - **배포(2026-11-25)**: BE #11, FE #26, DEPLOY #25 머지 후 백엔드·프론트를 같이 올리고 nginx reload 했다. 직전 백업 `data/backup/db-20261125-111235.sql.gz`·`uploads-20261125-111235.tar.gz`, 되돌리기 이미지 `moyeolog-{app,frontend}:before-live-20261125`(nginx 설정은 `location = /api/events` 를 남겨 둬도 옛 백엔드에서 404 일 뿐이다). 확인한 것: 컨테이너 정상, 도메인에서 토큰 없는 `/api/events` 401 JSON, 보안 헤더 유지. **확인하지 못한 것: 로그인한 실제 연결이 Caddy 를 거쳐 버퍼링 없이 오는지.** nginx 로그에서 `/api/events` 200 의 `rt=` 가 60초 안팎으로 반복되면 Caddy 가 버퍼링하는 것이다(프론트가 60초 무응답으로 끊고 다시 붙는 모양). 정상이면 탭을 숨기거나 30분이 될 때까지 이어진다.
 - **알고 있는 한계**: 닉네임·프로필 사진, AI 분석 결과, 메모 변경으로 바뀌는 '일정에 연결된 메모', 대화 지우기(내 쪽만)는 실시간으로 가지 않는다. 일정 상세 모달·메모 상세는 열려 있는 동안 내용이 바로 바뀌지 않는다(목록은 바뀐다). 끊긴 동안의 이벤트는 다시 보내지 않고 재접속 뒤 전체 새로 고침으로 메운다. 한 IP 뒤에서 30탭을 넘으면 그 뒤 탭은 429 → 폴링으로 돈다.
+
+## 홈 화면 웹앱 (feat/pwa, 2026-11-25 운영 배포)
+
+아이폰에서 '홈 화면에 추가'하면 Safari 바로가기가 아니라 앱처럼(주소창·도구 막대 없이) 뜬다. 전에는 매니페스트·iOS 메타·PNG 아이콘이 하나도 없었다.
+
+- `MOYEOLOG_FE/src/app/manifest.ts`(`display: standalone`, `start_url: /home`), `src/app/apple-icon.png`(180), `public/icons/icon-192·512·maskable-512.png`, `layout.tsx` 의 `appleWebApp`·`viewport.themeColor`. 서비스 워커는 없다(오프라인·푸시 없음).
+- 아이콘은 `src/app/icon.svg` 에서 sharp 로 뽑았다. 로고를 바꾸면 PNG 4개도 다시 만든다. iOS 는 투명 모서리를 검게 칠하므로 apple-icon 과 maskable 은 바탕을 꽉 채운 정사각형이다.
+- `viewport-fit=cover` 는 넣지 않았다. 넣으면 하단 탭(`pb-safe` 는 지금 정의가 없다)과 `100dvh` 높이 계산을 같이 고쳐야 한다.
+- 홈 화면 아이콘은 추가할 때의 설정으로 굳는다. 바꾼 뒤에는 지우고 다시 추가해야 한다. 앱 모드는 Safari 와 쿠키가 따로다.
+- PR FE #27. 되돌리기 이미지 `moyeolog-frontend:before-pwa-20261125`, 백업 `data/backup/db-20261125-112236.sql.gz`.
+- **확인하지 못한 것**: 실제 아이폰에서의 모양, 앱 모드에서 카카오 로그인(다른 도메인에 갔다 돌아올 때 세션이 붙는지).
 
 ## 2차 QA 와 수정 (2026-11-22)
 
