@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24), `feat/email-auth`·FE `feat/login-fold`(2026-11-25), `feat/weather`(2026-11-25) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `feat/weather` 머지 전 코드로 돌고 있다(날씨는 아직 배포하지 않았다).
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24), `feat/email-auth`·FE `feat/login-fold`(2026-11-25), `feat/weather`(2026-11-25), FE 로고(`feat/logo-s6`·`feat/logo-s11`·`feat/logo-s11-mark`)·`fix/login-landing-home`(2026-11-25), FE·BE `feat/midpoint`(2026-11-25) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
 
 ## 구조
 
@@ -31,7 +31,7 @@ docker compose up -d --build
 - `NEXT_PUBLIC_*` 값은 프론트 빌드 시점에 번들에 들어간다. 바꾸면 `--build` 로 다시 빌드해야 한다.
 - 프론트/백엔드 컨테이너를 재생성한 뒤에는 `docker exec moyeolog-nginx nginx -s reload` 를 한다 (upstream IP 갱신).
 - 호스트에 JDK 가 없다. node 는 Claude Code 플러그인 훅용으로 `~/.local/opt` 에 22 가 있을 뿐이다(2026-11-24). 검증은 Docker 로 한다.
-  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 191개)
+  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 194개)
   - 프론트 타입 검사: `node:20-alpine` 컨테이너에서 `npm ci && npx tsc --noEmit`
 - DB 접속: `docker exec moyeolog-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" moyeolog'`
 - 백업: `backup.sh` (DB + 업로드 볼륨 → `data/backup/`, 14일 보존, 권한 600). 매일 04:00 crontab 으로 돈다(2026-11-23 등록, 로그 `data/backup/backup.log`). 수동 덤프도 `data/backup/` (gitignore 대상).
@@ -75,14 +75,16 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **토큰** (`MOYEOLOG_FE/src/app/globals.css`)
   - 표면 `bg-canvas/surface/raised`, 글자 `text-ink/ink-2/ink-3`, 선 `border-line(-strong)`.
   - `bg-accent`(나무 갈색 #573c2d): 만들기·저장 버튼, 내가 보낸 메시지, 강조 글자에 쓴다.
-  - `bg-mark`(주황 #fe804d): 오늘, 선택 탭 밑줄, 안 읽음 점·배지, 로고 띠에만 쓴다. **글자색으로 쓰지 않는다.**
+  - `bg-mark`(주황 #fe804d): 오늘, 선택 탭 밑줄, 안 읽음 점·배지, 로고의 ㅇ 에만 쓴다. **글자색으로 쓰지 않는다.**
   - `bg-accent-soft`: 선택 바탕.
 - **글꼴**
-  - 제목·날짜 머리·항목 제목·선택 탭·로고는 `font-display`(Jua)다. `next/font/google` 로 빌드 때 받아 자체 호스팅하므로 CSP 를 바꾸지 않아도 된다. 빌드에는 네트워크가 필요하다.
+  - 제목·날짜 머리·항목 제목·선택 탭은 `font-display`(Jua)다(로고는 글꼴이 아니라 SVG). `next/font/google` 로 빌드 때 받아 자체 호스팅하므로 CSP 를 바꾸지 않아도 된다. 빌드에는 네트워크가 필요하다.
   - 본문은 Pretendard(jsDelivr), 숫자·시각은 `.stamp`(Pretendard Medium 고정폭)다. 주아에는 굵기를 주지 않는다.
 - **컴포넌트**
   - 버튼은 `.btn-primary/secondary/ghost/danger`(높이 36), `.btn-sm`, `.btn-icon`. 그 밖에 `.form-input`(흰 바탕 + 실선), `.card`, `.chip`.
   - 공통 부품은 `components/ui.tsx` 에 있다: `PageHeader`, `Ribbon`, `Dot`, `UnderlineTabs`, `Segmented`, `EmptyState`, `Modal`, `SideLabel`, `SideItem`. 새 화면도 이것을 쓴다.
+- **로고** (FE PR #10·#11·#13, 2026-11-25): `components/Logo.tsx` 한 SVG 다. 옅은 주황 타일의 2×2 초성(ㅁㅇㄹㄱ) + 가로 한 줄 "모여로그". 굵은 한 줄 선(`text-accent`)이고 ㅇ 만 주황 점(`--mark`)이다. 이름이 그림 안에 있어 글자를 따로 붙이지 않는다. `height` 는 타일 높이(상단 메뉴 30·32px, 로그인·가입 46px). 탭 아이콘은 같은 2×2 를 `app/icon.svg` 로 쓴다(기본 `favicon.ico` 는 지웠다). 시안은 Figma 페이지 "서비스 로고 시안 (2026-11-24)" 의 S11(1~7차 시안이 모두 남아 있다). 되돌리기 이미지 `moyeolog-frontend:before-logo-20261125`.
+- **로그인 뒤 첫 화면**은 홈이다(FE PR #12): `lib/url-safety.ts` 의 `safeCallbackPath` 기본 경로 `/home`. `callbackUrl` 이 있으면 그 경로.
 - **모임 얼굴** (FE PR #7, BE PR #4, 2026-11-24): 모임 수정에서 바꾼 사진·색이 화면에 보이게 했다
   - `components/groups/GroupIdentity.tsx`: `GroupCover`(배경 사진 표지, 없으면 모임 색 옅은 줄무늬), `GroupAvatar`(프로필 사진, 둥근 사각형, 없으면 모임 색 바탕 + 첫 글자), `groupStyle(theme)`.
   - 모임 화면 루트에 `style={groupStyle(group.colorTheme)}` 를 깔면 그 안에서 `bg-group`(모임 색), `text-group-ink`(글자용 진한 톤), `bg-group-wash`/`bg-group-soft`(옅은 바탕), `text-group-sel`(선택 글자)이 모임 색이 된다. 루트 밖에서는 기본색(주황·갈색·raised·ink)으로 돌아간다. 모임 달력은 `.group-cal`(globals.css).
@@ -113,7 +115,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **작업물**: worktree `/home/ruraeru/moyeolog-fix/ea-{be,fe,deploy}`, 계약 `EA_BRIEF.md`·`EA_FIX.md`, 보고서 `ea-report/`(리뷰 `review.md`·`review2.md`, QA `qa3.md`). QA 는 `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.ea.yml`(mailpit 127.0.0.1:8025).
 - **알고 있는 한계**: 응답 시간으로 계정 유무를 추측할 여지(측정 안 함). 여러 IP 로 계정 잠금(100회)을 걸 수 있음(비밀번호 찾기로 풀림). 가입 요청으로 시간당 200통 상한을 채우면 그동안 가입·재설정 메일이 버려짐. 비밀번호 변경·재설정과 같은 초에 한 로그인은 받은 토큰이 바로 401(`tokens_valid_after` 가 초 단위). 카카오를 해제한 뒤 그 카카오로 시작하면 빈 새 계정이 생김.
 
-## 날씨 (feat/weather, 2026-11-25 머지 · 미배포)
+## 날씨 (feat/weather, 2026-11-25 운영 배포)
 
 일정에 약속 장소를 지도에서 고르면 그 장소의 예보를 보여 주고, 날씨에 맞춰 주변 추천 순서를 바꾼다. '내 지역' 설정은 없다. 날씨는 항상 일정의 장소 기준이다.
 
@@ -125,7 +127,22 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **추천 규칙**: 비·눈 또는 강수확률 60% 이상, 33° 이상, -5° 이하 → 카페·문화시설·음식점. 맑음·구름 많음 → 관광명소·음식점·카페. 그 밖·예보 없음 → 음식점·카페. 종류마다 3곳씩 모두 5곳. 가짜 별점(`Math.random`)은 지웠다.
 - **QA**: `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.wx.yml`(ea 파일 뒤에 붙임, 가짜 기상청 `scripts/wx-kma-mock.js`), `./pw.sh node scripts/wx-ui.js` → 21건 통과, 스크린샷 `shots/wx/`. 실제 기상청은 `docker-compose.wx-real.yml` 을 더 붙이고 `./pw.sh node scripts/wx-real.js` 로 확인했다(2026-11-25, 서울·부산·제주·강릉 모두 200, 오늘부터 11일치, 첫 요청 약 2초·캐시 11ms). localhost 에서는 Kakao 지도가 안 떠서 일정 모달의 날씨·추천은 확인하지 못했다.
 - **PR**: BE #7, FE #15 머지(2026-11-25). 배포 레포는 서브모듈 포인터를 두 머지 커밋으로 옮겼다.
-- **배포 순서**: ① `backup.sh` ② `docker compose up -d --build` ③ nginx reload ④ `/api/weather` 가 200 인지 확인 ⑤ 운영에서 일정 모달로 장소를 골라 날씨·추천 확인. 마이그레이션 SQL 은 없다.
+- **배포**: 2026-11-25 중간 지점 기능과 함께 운영에 올렸다(`backup.sh` → 빌드 → nginx reload, 마이그레이션 SQL 없음). 운영에서 `/api/weather` 200 과 일정 모달의 날씨·추천은 아직 눈으로 확인하지 않았다.
+
+## 중간 지점 찾기 (feat/midpoint, 2026-11-25 운영 배포)
+
+여럿이 만나는 일정에서 각자 출발지를 적으면 가운데에서 가까운 지하철역을 추천하고, 일정을 만든 사람이 하나를 골라 일정 장소로 정한다.
+
+- **백엔드** `midpoint/`: 테이블 `schedule_departures`(일정·사용자별 한 줄, 이름 + 좌표, 일정 삭제 시 `ON DELETE CASCADE`, 회원 탈퇴 리스너). API 는 `/api/schedules/{id}/midpoint` 아래다.
+  - `GET`: 적은 사람 목록(이름만), 내 출발지, 지난번 출발지(다른 일정에 마지막으로 적은 것), 가운데 좌표(2명 이상일 때, 좌표 평균), 적은 사람 수/대상 수.
+  - `PUT /departure`·`DELETE /departure`: 내 출발지 저장·삭제.
+  - `POST /request`: 아직 안 적은 사람에게 알림. `POST /confirm` `{name, latitude?, longitude?}`: 일정 장소(이름 + 좌표)로 저장하고 나머지에게 알림. 둘 다 일정을 만든 사람만.
+- **권한**: 모임 일정은 모임 멤버, 개인 일정은 만든 사람과 참여자. 그 밖은 403. 다른 사람의 출발지 좌표는 내려주지 않는다.
+- **알림**: 새 종류를 만들지 않고 `SCHEDULE_PARTICIPANT`('일정 참여' 설정)를 쓴다.
+- **프론트**: `components/MidpointSection.tsx`, `lib/midpoint-api.ts`. 일정 상세(`AppointmentDetailView`)의 '중간 지점' 행이고 모임 일정·참여자가 있는 일정에서만 보인다. 지하철역은 Kakao 지도 SDK 카테고리 검색(`SW8`, 반경 5km → 없으면 20km, 거리순)으로 찾고 같은 역의 노선은 한 줄로 묶어 5곳까지 보여 준다. 15초 폴링. 화면에 지도는 없고 카카오맵 링크만 있다.
+- **확인**: BE 통합 테스트 3개(`MidpointIntegrationTest`), FE `tsc`·`eslint`. 운영 배포 뒤 컨테이너 healthy·테이블 생성·로그 오류 0 까지 봤다. 로그인한 화면에서 실제 동작(지하철역 추천)은 아직 눈으로 확인하지 않았다.
+- **알고 있는 한계**: 가운데는 좌표 평균이지 이동 시간 기준이 아니다. 두 명일 때는 가운데와 내 출발지로 상대 위치를 대략 짐작할 수 있다.
+- **PR**: BE #6, FE #14. 작업 worktree `/home/ruraeru/moyeolog-midpoint/{be,fe}`. 되돌리기 이미지 `moyeolog-{app,frontend}:before-midpoint-20261125`, 백업 `data/backup/db-20261125-093541.sql.gz`.
 
 ## 2차 QA 와 수정 (2026-11-22)
 
