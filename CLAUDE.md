@@ -31,7 +31,7 @@ docker compose up -d --build
 - `NEXT_PUBLIC_*` 값은 프론트 빌드 시점에 번들에 들어간다. 바꾸면 `--build` 로 다시 빌드해야 한다.
 - 프론트/백엔드 컨테이너를 재생성한 뒤에는 `docker exec moyeolog-nginx nginx -s reload` 를 한다 (upstream IP 갱신).
 - 호스트에 JDK 가 없다. node 는 Claude Code 플러그인 훅용으로 `~/.local/opt` 에 22 가 있을 뿐이다(2026-11-24). 검증은 Docker 로 한다.
-  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 194개)
+  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 196개)
   - 프론트 타입 검사: `node:20-alpine` 컨테이너에서 `npm ci && npx tsc --noEmit`
 - DB 접속: `docker exec moyeolog-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" moyeolog'`
 - 백업: `backup.sh` (DB + 업로드 볼륨 → `data/backup/`, 14일 보존, 권한 600). 매일 04:00 crontab 으로 돈다(2026-11-23 등록, 로그 `data/backup/backup.log`). 수동 덤프도 `data/backup/` (gitignore 대상).
@@ -143,8 +143,12 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **알림**: 새 종류를 만들지 않고 `SCHEDULE_PARTICIPANT`('일정 참여' 설정)를 쓴다.
 - **프론트**: `components/MidpointSection.tsx`, `lib/midpoint-api.ts`. 일정 상세(`AppointmentDetailView`)의 '중간 지점' 행이고 모임 일정·참여자가 있는 일정에서만 보인다. 지하철역은 Kakao 지도 SDK 카테고리 검색(`SW8`, 반경 5km → 없으면 20km, 거리순)으로 찾고 같은 역의 노선은 한 줄로 묶어 5곳까지 보여 준다. 15초 폴링. 화면에 지도는 없고 카카오맵 링크만 있다.
 - **확인**: BE 통합 테스트 3개(`MidpointIntegrationTest`), FE `tsc`·`eslint`. 운영 배포 뒤 컨테이너 healthy·테이블 생성·로그 오류 0 까지 봤다. 로그인한 화면에서 실제 동작(지하철역 추천)은 아직 눈으로 확인하지 않았다.
+- **혼자인 일정**(FE #16): 대상이 한 명뿐이면(`expectedCount <= 1`) '중간 지점' 행을 통째로 숨긴다.
+- **달력의 붉은 칸**(BE #8·#9, FE #19·#20): `ScheduleResponse` 에 `departureNeeded`(내가 출발지를 안 적음)와 `placeNeeded`(내가 만든 일정인데 장소 미정)가 있다. 둘 다 여럿이 만나고, 장소가 비었고, 끝나지 않은 일정에서만 true 다. 일정 달력(월·주·목록)과 모임 달력에서 그 칸을 `bg-negative-soft text-negative` 로 칠하고 까닭('출발지 미입력'/'장소 미정')을 적는다(`lib/schedule-api.ts` 의 `scheduleAlert`). 끝난 일정·혼자인 일정은 칠하지 않는다.
+- **참여자 추가 알림**: 일정에 장소가 비어 있으면 문구 끝에 '출발지를 입력해 주세요!' 가 붙는다.
+- **배포할 때**: 배포 폴더의 서브모듈에 다른 작업의 커밋 전 변경이 있을 수 있다. 그럴 때는 깨끗한 `main` worktree 를 빌드 컨텍스트로 덮어쓴 compose 파일을 `-f` 로 더 붙여 빌드하고 `docker compose up -d --no-build` 로 올린다(2026-11-25 에 이렇게 했다).
 - **알고 있는 한계**: 가운데는 좌표 평균이지 이동 시간 기준이 아니다. 두 명일 때는 가운데와 내 출발지로 상대 위치를 대략 짐작할 수 있다.
-- **PR**: BE #6, FE #14. 작업 worktree `/home/ruraeru/moyeolog-midpoint/{be,fe}`. 되돌리기 이미지 `moyeolog-{app,frontend}:before-midpoint-20261125`, 백업 `data/backup/db-20261125-093541.sql.gz`.
+- **PR**: BE #6·#8·#9, FE #14·#16·#19·#20. 작업 worktree `/home/ruraeru/moyeolog-midpoint/{be,fe}`. 되돌리기 이미지 `moyeolog-{app,frontend}:before-midpoint-20261125`, 백업 `data/backup/db-20261125-093541.sql.gz`.
 
 ## 2차 QA 와 수정 (2026-11-22)
 
