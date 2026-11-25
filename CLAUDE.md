@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24), `feat/email-auth`·FE `feat/login-fold`(2026-11-25) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24), `feat/email-auth`·FE `feat/login-fold`(2026-11-25), `feat/weather`(2026-11-25) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `feat/weather` 머지 전 코드로 돌고 있다(날씨는 아직 배포하지 않았다).
 
 ## 구조
 
@@ -31,7 +31,7 @@ docker compose up -d --build
 - `NEXT_PUBLIC_*` 값은 프론트 빌드 시점에 번들에 들어간다. 바꾸면 `--build` 로 다시 빌드해야 한다.
 - 프론트/백엔드 컨테이너를 재생성한 뒤에는 `docker exec moyeolog-nginx nginx -s reload` 를 한다 (upstream IP 갱신).
 - 호스트에 JDK 가 없다. node 는 Claude Code 플러그인 훅용으로 `~/.local/opt` 에 22 가 있을 뿐이다(2026-11-24). 검증은 Docker 로 한다.
-  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 182개)
+  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 191개)
   - 프론트 타입 검사: `node:20-alpine` 컨테이너에서 `npm ci && npx tsc --noEmit`
 - DB 접속: `docker exec moyeolog-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" moyeolog'`
 - 백업: `backup.sh` (DB + 업로드 볼륨 → `data/backup/`, 14일 보존, 권한 600). 매일 04:00 crontab 으로 돈다(2026-11-23 등록, 로그 `data/backup/backup.log`). 수동 덤프도 `data/backup/` (gitignore 대상).
@@ -112,6 +112,20 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **배포(2026-11-25)**: PR BE #5, FE #8·#9(로그인 화면의 이메일 폼을 '이메일로 계속하기' 버튼 뒤로 접음), DEPLOY #12·#13 머지 후 운영 반영. 직전 백업 `data/backup/db-20261125-080616.sql.gz`·`uploads-20261125-080616.tar.gz`, 되돌리기용 이미지 `moyeolog-{app,frontend}:before-ea-20261125`. SMTP 는 Gmail(앱 비밀번호, `.env`). 발송은 SMTP 단계까지 확인했고, 실제 카카오 로그인·연결은 아직 확인하지 않았다.
 - **작업물**: worktree `/home/ruraeru/moyeolog-fix/ea-{be,fe,deploy}`, 계약 `EA_BRIEF.md`·`EA_FIX.md`, 보고서 `ea-report/`(리뷰 `review.md`·`review2.md`, QA `qa3.md`). QA 는 `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.ea.yml`(mailpit 127.0.0.1:8025).
 - **알고 있는 한계**: 응답 시간으로 계정 유무를 추측할 여지(측정 안 함). 여러 IP 로 계정 잠금(100회)을 걸 수 있음(비밀번호 찾기로 풀림). 가입 요청으로 시간당 200통 상한을 채우면 그동안 가입·재설정 메일이 버려짐. 비밀번호 변경·재설정과 같은 초에 한 로그인은 받은 토큰이 바로 401(`tokens_valid_after` 가 초 단위). 카카오를 해제한 뒤 그 카카오로 시작하면 빈 새 계정이 생김.
+
+## 날씨 (feat/weather, 2026-11-25 머지 · 미배포)
+
+일정에 약속 장소를 지도에서 고르면 그 장소의 예보를 보여 주고, 날씨에 맞춰 주변 추천 순서를 바꾼다. '내 지역' 설정은 없다. 날씨는 항상 일정의 장소 기준이다.
+
+- **출처**: 기상청 API허브(apihub.kma.go.kr)의 단기예보(`VilageFcstInfoService_2.0/getVilageFcst`, 격자·시간별 3~4일)와 중기예보(`MidFcstInfoService/getMidLandFcst`·`getMidTa`, 지역·일별 10일까지). 키는 `KMA_SERVICE_KEY`(쿼리 `authKey`). data.go.kr 키가 아니다. API허브 활용신청은 조회 항목 단위다: `getVilageFcst`, `getMidLandFcst`, `getMidTa` 세 개를 신청했다(2026-11-25). 신청하지 않은 항목은 403.
+- **백엔드** `weather/`: `GET /api/weather?lat=&lng=` → `{hourly:[{time,sky,temp,pop}], daily:[{date,sky,pop,min,max}]}`. `sky` 는 `CLEAR·PARTLY·CLOUDY·RAIN·SLEET·SNOW`. 같은 날짜는 단기가 중기를 덮는다. 격자·지역별로 다음 발표 시각까지 메모리 캐시. 중기예보는 하루치만 보관되므로 새 발표(06·18시)가 아직 없으면 직전 발표를 쓴다. 단기 응답의 마지막 날은 자정 한 시각뿐이라 일별 요약을 만들지 않는다. 한쪽만 실패하면 남은 쪽만 주고, 둘 다 실패하거나 키가 없으면 503(화면은 날씨만 숨김). 국외 좌표는 400.
+- **중기 지역**: 가장 가까운 대표 도시 28곳(`MidRegion`)의 값을 쓴다. 코드는 API허브 예보구역 목록으로 확인했다.
+- **좌표**: `schedules.latitude`·`longitude`(NULL 허용, Hibernate 가 만든다). 지도에서 장소를 골랐을 때만 저장하고, 장소 글자를 직접 고치면 지운다. 예전 일정은 좌표가 없어 달력·홈에 날씨가 안 나온다(상세 화면은 장소 검색 결과 좌표로 대신한다).
+- **프론트**: `lib/weather.ts`(조회, `weatherAt`, 추천 규칙 `recommendFor`), `hooks/useWeather.ts`(`usePlaceWeather`, `useScheduleWeather` — 한 화면 장소 8곳까지), `components/Weather.tsx`(`WeatherIcon`, `WeatherLine`). 달력(월·주)·모임 달력은 날짜 칸 오른쪽 위 아이콘, 홈·일정 상세는 '비 7° · 강수 80%' 한 줄, 일정 모달은 날씨 + 추천.
+- **추천 규칙**: 비·눈 또는 강수확률 60% 이상, 33° 이상, -5° 이하 → 카페·문화시설·음식점. 맑음·구름 많음 → 관광명소·음식점·카페. 그 밖·예보 없음 → 음식점·카페. 종류마다 3곳씩 모두 5곳. 가짜 별점(`Math.random`)은 지웠다.
+- **QA**: `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.wx.yml`(ea 파일 뒤에 붙임, 가짜 기상청 `scripts/wx-kma-mock.js`), `./pw.sh node scripts/wx-ui.js` → 21건 통과, 스크린샷 `shots/wx/`. 실제 기상청은 `docker-compose.wx-real.yml` 을 더 붙이고 `./pw.sh node scripts/wx-real.js` 로 확인했다(2026-11-25, 서울·부산·제주·강릉 모두 200, 오늘부터 11일치, 첫 요청 약 2초·캐시 11ms). localhost 에서는 Kakao 지도가 안 떠서 일정 모달의 날씨·추천은 확인하지 못했다.
+- **PR**: BE #7, FE #15 머지(2026-11-25). 배포 레포는 서브모듈 포인터를 두 머지 커밋으로 옮겼다.
+- **배포 순서**: ① `backup.sh` ② `docker compose up -d --build` ③ nginx reload ④ `/api/weather` 가 200 인지 확인 ⑤ 운영에서 일정 모달로 장소를 골라 날씨·추천 확인. 마이그레이션 SQL 은 없다.
 
 ## 2차 QA 와 수정 (2026-11-22)
 
