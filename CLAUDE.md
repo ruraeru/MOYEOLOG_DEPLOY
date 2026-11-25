@@ -83,6 +83,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
   - 제목·날짜 머리·항목 제목·선택 탭은 `font-display`(Jua)다(로고는 글꼴이 아니라 SVG). `next/font/google` 로 빌드 때 받아 자체 호스팅하므로 CSP 를 바꾸지 않아도 된다. 빌드에는 네트워크가 필요하다.
   - 본문은 Pretendard(jsDelivr), 숫자·시각은 `.stamp`(Pretendard Medium 고정폭)다. 주아에는 굵기를 주지 않는다.
 - **컴포넌트**
+  - 창(`Modal`)의 겹침 순서는 기본 `z-[110]` 이다. 모바일 하단 탭이 `z-[100]` 이므로 `zIndex` 를 100 아래로 주면 화면 아래에 붙는 버튼 줄이 하단 탭에 가려진다(새 모임 만들기 창이 `z-50` 이라 '모임 만들기' 버튼이 안 보였다. FE #28, 2026-11-25 수정·배포, 되돌리기 이미지 `moyeolog-frontend:before-gcz-20261125`). 다른 창 위에 뜨는 창만 더 높은 값(`z-[120]`)을 준다.
   - 버튼은 `.btn-primary/secondary/ghost/danger`(높이 36), `.btn-sm`, `.btn-icon`. 그 밖에 `.form-input`(흰 바탕 + 실선), `.card`, `.chip`.
   - 공통 부품은 `components/ui.tsx` 에 있다: `PageHeader`, `Ribbon`, `Dot`, `UnderlineTabs`, `Segmented`, `EmptyState`, `Modal`, `SideLabel`, `SideItem`. 새 화면도 이것을 쓴다.
 - **로고** (FE PR #10·#11·#13, 2026-11-25): `components/Logo.tsx` 한 SVG 다. 옅은 주황 타일의 2×2 초성(ㅁㅇㄹㄱ) + 가로 한 줄 "모여로그". 굵은 한 줄 선(`text-accent`)이고 ㅇ 만 주황 점(`--mark`)이다. 이름이 그림 안에 있어 글자를 따로 붙이지 않는다. `height` 는 타일 높이(상단 메뉴 30·32px, 로그인·가입 46px). 탭 아이콘은 같은 2×2 를 `app/icon.svg` 로 쓴다(기본 `favicon.ico` 는 지웠다). 시안은 Figma 페이지 "서비스 로고 시안 (2026-11-24)" 의 S11(1~7차 시안이 모두 남아 있다). 되돌리기 이미지 `moyeolog-frontend:before-logo-20261125`.
