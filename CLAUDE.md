@@ -84,6 +84,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
   - 본문은 Pretendard(jsDelivr), 숫자·시각은 `.stamp`(Pretendard Medium 고정폭)다. 주아에는 굵기를 주지 않는다.
 - **컴포넌트**
   - 창(`Modal`)의 겹침 순서는 기본 `z-[110]` 이다. 모바일 하단 탭이 `z-[100]` 이므로 `zIndex` 를 100 아래로 주면 화면 아래에 붙는 버튼 줄이 하단 탭에 가려진다(새 모임 만들기 창이 `z-50` 이라 '모임 만들기' 버튼이 안 보였다. FE #28, 2026-11-25 수정·배포, 되돌리기 이미지 `moyeolog-frontend:before-gcz-20261125`). 다른 창 위에 뜨는 창만 더 높은 값(`z-[120]`)을 준다.
+  - 모바일 입력칸 글자는 16px 다. iOS Safari 는 16px 보다 작은 입력칸에 포커스가 가면 화면을 확대하므로, `globals.css` 맨 아래에서 터치 기기(`pointer: coarse`)의 `input`·`textarea`·`select` 를 16px 로 올린다(데스크톱은 `.form-input` 의 14px 그대로, 손가락 확대는 막지 않는다). 마크다운 편집기는 입력칸과 색칠용 글자가 겹쳐 있어 둘을 같이 16px/22px 로 맞춘다. 모바일에서 좁은 칸에 입력칸을 나란히 둘 때는 16px 기준으로 폭을 잡는다(일정 창의 날짜·시간 칸). FE #32, 2026-11-25 배포, 되돌리기 이미지 `moyeolog-frontend:before-inputzoom-20261125`. 실제 아이폰에서는 확인하지 못했다.
   - 버튼은 `.btn-primary/secondary/ghost/danger`(높이 36), `.btn-sm`, `.btn-icon`. 그 밖에 `.form-input`(흰 바탕 + 실선), `.card`, `.chip`.
   - 공통 부품은 `components/ui.tsx` 에 있다: `PageHeader`, `Ribbon`, `Dot`, `UnderlineTabs`, `Segmented`, `EmptyState`, `Modal`, `SideLabel`, `SideItem`. 새 화면도 이것을 쓴다.
 - **로고** (FE PR #10·#11·#13, 2026-11-25): `components/Logo.tsx` 한 SVG 다. 옅은 주황 타일의 2×2 초성(ㅁㅇㄹㄱ) + 가로 한 줄 "모여로그". 굵은 한 줄 선(`text-accent`)이고 ㅇ 만 주황 점(`--mark`)이다. 이름이 그림 안에 있어 글자를 따로 붙이지 않는다. `height` 는 타일 높이(상단 메뉴 30·32px, 로그인·가입 46px). 탭 아이콘은 같은 2×2 를 `app/icon.svg` 로 쓴다(기본 `favicon.ico` 는 지웠다). 시안은 Figma 페이지 "서비스 로고 시안 (2026-11-24)" 의 S11(1~7차 시안이 모두 남아 있다). 되돌리기 이미지 `moyeolog-frontend:before-logo-20261125`.
