@@ -4,7 +4,7 @@
 
 - 운영 주소: https://moyeolog.ruraeru.xyz
 - 서브모듈: `MOYEOLOG_FE` (github.com/ruraeru/MOYEOLOG_FE), `MOYEOLOG_BE` (github.com/ruraeru/MOYEOLOG_BE)
-- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
+- 브랜치: 세 레포 모두 `main`. `fix/qa-findings`(2026-11-12), FE `design/unslop`(2026-11-14), `fix/qa2`(2026-11-23), FE `design/unslop-2`(2026-11-24), FE·BE `feat/group-identity`(2026-11-24), `feat/email-auth`·FE `feat/login-fold`(2026-11-25) 는 PR 로 머지했다(merge commit, 브랜치는 남겨 둠). 실서비스는 `main` 과 같은 코드로 돌고 있다.
 
 ## 구조
 
@@ -31,7 +31,7 @@ docker compose up -d --build
 - `NEXT_PUBLIC_*` 값은 프론트 빌드 시점에 번들에 들어간다. 바꾸면 `--build` 로 다시 빌드해야 한다.
 - 프론트/백엔드 컨테이너를 재생성한 뒤에는 `docker exec moyeolog-nginx nginx -s reload` 를 한다 (upstream IP 갱신).
 - 호스트에 JDK 가 없다. node 는 Claude Code 플러그인 훅용으로 `~/.local/opt` 에 22 가 있을 뿐이다(2026-11-24). 검증은 Docker 로 한다.
-  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 144개)
+  - 백엔드 테스트: `docker run --rm -v "$PWD":/src -w /src eclipse-temurin:25-jdk-alpine ./gradlew test --no-daemon` (H2 사용, 182개)
   - 프론트 타입 검사: `node:20-alpine` 컨테이너에서 `npm ci && npx tsc --noEmit`
 - DB 접속: `docker exec moyeolog-db sh -c 'mysql -uroot -p"$MYSQL_ROOT_PASSWORD" moyeolog'`
 - 백업: `backup.sh` (DB + 업로드 볼륨 → `data/backup/`, 14일 보존, 권한 600). 매일 04:00 crontab 으로 돈다(2026-11-23 등록, 로그 `data/backup/backup.log`). 수동 덤프도 `data/backup/` (gitignore 대상).
@@ -39,8 +39,8 @@ docker compose up -d --build
 ## 꼭 알아야 할 것
 
 - **백엔드에 `application.yml` 이 없다** (gitignore). 운영 설정은 전부 `docker-compose.yml` 의 환경변수로 들어간다. 새 프로퍼티는 `@Value` 기본값을 주고 `application.yml.example` 과 compose 에 추가한다.
-- **`INTERNAL_API_SECRET`**: 프론트 서버(NextAuth)가 백엔드 `POST /api/auth/sync`·`POST /api/auth/logout` 을 부를 때 `X-Internal-Secret` 헤더로 보낸다. 프론트·백엔드 컨테이너에 같은 값이 있어야 로그인이 된다. nginx 는 `/api/auth/sync`, `/api/auth/refresh`, `/api/auth/logout` 을 외부에 404 로 막는다.
-- **계정 연결**: 로그인은 kakaoId 로 찾는다. 못 찾으면 Kakao 가 '검증됨'으로 넘긴 이메일이고, 그 이메일의 기존 계정이 아직 한 번도 연결되지 않았을 때(`users.kakao_linked_at IS NULL`)만 그 계정에 붙인다(Kakao 앱 교체 때 기존 사용자 이전용). 그 밖에는 새 계정.
+- **`INTERNAL_API_SECRET`**: 프론트 서버(NextAuth)가 백엔드 `POST /api/auth/sync`·`POST /api/auth/logout` 을 부를 때 `X-Internal-Secret` 헤더로 보낸다(이메일 로그인 `POST /api/auth/login`, 카카오 연결 `POST /api/auth/link-kakao` 도 같다). 프론트·백엔드 컨테이너에 같은 값이 있어야 로그인이 된다. nginx 는 `/api/auth/sync`, `/api/auth/refresh`, `/api/auth/logout`, `/api/auth/login`, `/api/auth/link-kakao` 를 외부에 404 로 막는다.
+- **로그인 방법**: 카카오와 이메일+비밀번호 두 가지다(자세한 규칙은 아래 '이메일 가입 + 카카오 연동'). 카카오 로그인은 kakaoId 로 찾는다. 못 찾으면 Kakao 가 '검증됨'으로 넘긴 이메일이고, 그 이메일의 계정이 정확히 하나이며 아직 한 번도 카카오에 연결되지 않았을 때(`users.kakao_linked_at IS NULL`)만 그 계정에 붙인다. 이메일로만 가입한 계정(`kakao_id IS NULL`)은 그 이메일이 인증돼 있어야 붙는다. 카카오를 해제한 계정은 `kakao_linked_at` 이 남아 다시 자동으로 붙지 않는다. 그 밖에는 새 계정.
 - **토큰**: 로그아웃하면 그 기기의 리프레시 토큰을 지우고 액세스 토큰 jti 를 만료까지 거부한다(`revoked_access_tokens`). '모든 기기 로그아웃'은 `users.tokens_valid_after` 이전 토큰을 거부. `exp` 없는 토큰·typ 없는 예전 토큰은 거부(`JWT_ACCEPT_LEGACY_TOKENS` 기본 false).
 - **시간**: 일정 시각과 작성 시각은 오프셋 없는 한국 시간 `LocalDateTime` 이다. 백엔드 컨테이너는 `TZ=Asia/Seoul`. 프론트는 `yyyy-MM-dd'T'HH:mm:ss` 로 보낸다 (`toISOString()` 금지).
 - **스키마**: `ddl-auto=update`. Hibernate 는 기존 컬럼 타입을 바꾸지 않으므로 타입 변경은 직접 `ALTER TABLE` 해야 한다.
@@ -109,7 +109,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **메일**: `SPRING_MAIL_*`, `MAIL_FROM`, `APP_URL`. `SPRING_MAIL_HOST` 가 비면 메일이 필요한 요청은 503. 발송은 커밋 뒤 별도 스레드. 상한(앱 메모리): 이메일별 1분 1통·1시간 5통, 전체 시간당 200통(보안 알림은 제외), 이메일 등록은 사용자별 하루 5통.
 - **nginx**: `account_limit`(분당 10, `/api/account/` 와 `/api/users/me/{password,email,kakao}`), `credentials_limit`(분당 20, `/api/auth/callback/credentials`).
 - **배포 순서**: ① `backup.sh` ② `migrations/2026-11-25-email-auth/pre-deploy.sql`(`kakao_id` NULL 허용. 새 컬럼·`email_verifications` 는 Hibernate 가 만든다) ③ `.env` 에 SMTP 값 ④ `docker compose up -d --build` ⑤ nginx reload ⑥ 실제 카카오로 로그인·연결·409 확인(QA 에서 실제 OAuth 는 못 돌렸다).
-- **배포(2026-11-25)**: PR BE #5, FE #8·#9(로그인 화면의 이메일 폼을 '이메일로 계속하기' 버튼 뒤로 접음), DEPLOY #12 머지 후 운영 반영. 직전 백업 `data/backup/db-20261125-080616.sql.gz`·`uploads-20261125-080616.tar.gz`, 되돌리기용 이미지 `moyeolog-{app,frontend}:before-ea-20261125`. SMTP 는 Gmail(앱 비밀번호, `.env`). 발송은 SMTP 단계까지 확인했고, 실제 카카오 로그인·연결은 아직 확인하지 않았다.
+- **배포(2026-11-25)**: PR BE #5, FE #8·#9(로그인 화면의 이메일 폼을 '이메일로 계속하기' 버튼 뒤로 접음), DEPLOY #12·#13 머지 후 운영 반영. 직전 백업 `data/backup/db-20261125-080616.sql.gz`·`uploads-20261125-080616.tar.gz`, 되돌리기용 이미지 `moyeolog-{app,frontend}:before-ea-20261125`. SMTP 는 Gmail(앱 비밀번호, `.env`). 발송은 SMTP 단계까지 확인했고, 실제 카카오 로그인·연결은 아직 확인하지 않았다.
 - **작업물**: worktree `/home/ruraeru/moyeolog-fix/ea-{be,fe,deploy}`, 계약 `EA_BRIEF.md`·`EA_FIX.md`, 보고서 `ea-report/`(리뷰 `review.md`·`review2.md`, QA `qa3.md`). QA 는 `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.ea.yml`(mailpit 127.0.0.1:8025).
 - **알고 있는 한계**: 응답 시간으로 계정 유무를 추측할 여지(측정 안 함). 여러 IP 로 계정 잠금(100회)을 걸 수 있음(비밀번호 찾기로 풀림). 가입 요청으로 시간당 200통 상한을 채우면 그동안 가입·재설정 메일이 버려짐. 비밀번호 변경·재설정과 같은 초에 한 로그인은 받은 토큰이 바로 401(`tokens_valid_after` 가 초 단위). 카카오를 해제한 뒤 그 카카오로 시작하면 빈 새 계정이 생김.
 
