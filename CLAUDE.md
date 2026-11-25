@@ -145,10 +145,11 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **확인**: BE 통합 테스트 3개(`MidpointIntegrationTest`), FE `tsc`·`eslint`. 운영 배포 뒤 컨테이너 healthy·테이블 생성·로그 오류 0 까지 봤다. 로그인한 화면에서 실제 동작(지하철역 추천)은 아직 눈으로 확인하지 않았다.
 - **혼자인 일정**(FE #16): 대상이 한 명뿐이면(`expectedCount <= 1`) '중간 지점' 행을 통째로 숨긴다.
 - **달력의 붉은 칸**(BE #8·#9, FE #19·#20): `ScheduleResponse` 에 `departureNeeded`(내가 출발지를 안 적음)와 `placeNeeded`(내가 만든 일정인데 장소 미정)가 있다. 둘 다 여럿이 만나고, 장소가 비었고, 끝나지 않은 일정에서만 true 다. 일정 달력(월·주·목록)과 모임 달력에서 그 칸을 `bg-negative-soft text-negative` 로 칠하고 까닭('출발지 미입력'/'장소 미정')을 적는다(`lib/schedule-api.ts` 의 `scheduleAlert`). 끝난 일정·혼자인 일정은 칠하지 않는다.
+- **정해진 역 근처 추천**(FE #21): 장소가 정해지면 역 목록 아래에 그 역 근처 추천 장소 5곳을 일정 시작 시각의 날씨에 맞춰 보여 준다(날씨 기능의 `recommendFor`·`fetchRecommendations`·`usePlaceWeather` 를 그대로 쓴다). 보기 전용이고 카카오맵 링크만 있다.
 - **참여자 추가 알림**: 일정에 장소가 비어 있으면 문구 끝에 '출발지를 입력해 주세요!' 가 붙는다.
 - **배포할 때**: 배포 폴더의 서브모듈에 다른 작업의 커밋 전 변경이 있을 수 있다. 그럴 때는 깨끗한 `main` worktree 를 빌드 컨텍스트로 덮어쓴 compose 파일을 `-f` 로 더 붙여 빌드하고 `docker compose up -d --no-build` 로 올린다(2026-11-25 에 이렇게 했다).
 - **알고 있는 한계**: 가운데는 좌표 평균이지 이동 시간 기준이 아니다. 두 명일 때는 가운데와 내 출발지로 상대 위치를 대략 짐작할 수 있다.
-- **PR**: BE #6·#8·#9, FE #14·#16·#19·#20. 작업 worktree `/home/ruraeru/moyeolog-midpoint/{be,fe}`. 되돌리기 이미지 `moyeolog-{app,frontend}:before-midpoint-20261125`, 백업 `data/backup/db-20261125-093541.sql.gz`.
+- **PR**: BE #6·#8·#9, FE #14·#16·#19·#20·#21. 작업 worktree `/home/ruraeru/moyeolog-midpoint/{be,fe}`. 되돌리기 이미지 `moyeolog-{app,frontend}:before-midpoint-20261125`, 백업 `data/backup/db-20261125-093541.sql.gz`.
 
 ## 2차 QA 와 수정 (2026-11-22)
 
