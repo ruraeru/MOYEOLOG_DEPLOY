@@ -124,11 +124,12 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **중기 지역**: 가장 가까운 대표 도시 28곳(`MidRegion`)의 값을 쓴다. 코드는 API허브 예보구역 목록으로 확인했다.
 - **좌표**: `schedules.latitude`·`longitude`(NULL 허용, Hibernate 가 만든다). 지도에서 장소를 골랐을 때만 저장하고, 장소 글자를 직접 고치면 지운다. 예전 일정은 좌표가 없어 달력·홈에 날씨가 안 나온다(상세 화면은 장소 검색 결과 좌표로 대신한다).
 - **프론트**: `lib/weather.ts`(조회, `weatherAt`, 추천 규칙 `recommendFor`), `hooks/useWeather.ts`(`usePlaceWeather`, `useScheduleWeather` — 한 화면 장소 8곳까지), `components/Weather.tsx`(`WeatherIcon`, `WeatherLine`). 달력(월·주)·모임 달력은 날짜 칸 오른쪽 위 아이콘, 홈·일정 상세는 '비 7° · 강수 80%' 한 줄, 일정 모달은 날씨 + 추천.
-- **아이콘 색** (`globals.css` 의 `--wx-*`, 클래스 `text-wx-sun/rain/snow`): 맑음·구름 많음은 황토색 `#bf7d0c`, 비·비 또는 눈은 파랑 `#3f6f99`, 눈은 청록 `#3f93a8`, 흐림은 `ink-3`. 흰 바탕에서 3:1 이상이다. 아이콘에만 쓰고 글자에는 쓰지 않는다.
+- **아이콘 색** (`globals.css` 의 `--wx-*`, 클래스 `text-wx-sun/rain/snow`, FE #17·#18): 맑음·구름 많음은 노랑 `#f59f00`, 비·비 또는 눈은 파랑 `#1c7ed6`, 눈은 청록 `#0cb0c9`, 흐림은 `ink-3`. 16px, 선 굵기 2, 같은 색 22% 채움(`Weather.tsx` 의 `SHAPE`). 눈에 띄는 쪽을 골라서 노랑은 흰 바탕 대비가 3:1 에 못 미친다. 아이콘에만 쓰고 글자에는 쓰지 않는다.
 - **추천 규칙**: 비·눈 또는 강수확률 60% 이상, 33° 이상, -5° 이하 → 카페·문화시설·음식점. 맑음·구름 많음 → 관광명소·음식점·카페. 그 밖·예보 없음 → 음식점·카페. 종류마다 3곳씩 모두 5곳. 가짜 별점(`Math.random`)은 지웠다.
 - **QA**: `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.wx.yml`(ea 파일 뒤에 붙임, 가짜 기상청 `scripts/wx-kma-mock.js`), `./pw.sh node scripts/wx-ui.js` → 21건 통과, 스크린샷 `shots/wx/`. 실제 기상청은 `docker-compose.wx-real.yml` 을 더 붙이고 `./pw.sh node scripts/wx-real.js` 로 확인했다(2026-11-25, 서울·부산·제주·강릉 모두 200, 오늘부터 11일치, 첫 요청 약 2초·캐시 11ms). localhost 에서는 Kakao 지도가 안 떠서 일정 모달의 날씨·추천은 확인하지 못했다.
 - **PR**: BE #7, FE #15 머지(2026-11-25). 배포 레포는 서브모듈 포인터를 두 머지 커밋으로 옮겼다.
 - **배포**: 2026-11-25 중간 지점 기능과 함께 운영에 올렸다(`backup.sh` → 빌드 → nginx reload, 마이그레이션 SQL 없음). 운영에서 `/api/weather` 200 과 일정 모달의 날씨·추천은 아직 눈으로 확인하지 않았다.
+- **아이콘 색 배포**(2026-11-25): 프론트만 두 번 다시 빌드했다(FE #17 → #18). 되돌리기 이미지 `moyeolog-frontend:before-wxcolor-20261125`(색 없음), `before-wxvivid-20261125`(첫 색). 백업 `data/backup/db-20261125-095637.sql.gz`. 운영 CSS 의 `--wx-*` 값으로 반영을 확인했고, 로그인한 화면은 눈으로 확인하지 않았다.
 
 ## 중간 지점 찾기 (feat/midpoint, 2026-11-25 운영 배포)
 
