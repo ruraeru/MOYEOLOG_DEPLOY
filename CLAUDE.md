@@ -51,6 +51,7 @@ docker compose up -d --build
 - **업로드**: 백엔드가 파일 내용(매직 바이트)으로 JPEG/PNG/GIF/WEBP 만 받고 확장자는 서버가 정한다. nginx 는 `/uploads/` 에서 이미지 확장자만 이미지로 내려주고 나머지는 다운로드로 처리한다. 업로드 볼륨은 uid 1001 소유여야 한다 (백엔드가 non-root 로 실행).
 - **알림·메시지**: 백엔드 `notification/`, `message/` 패키지. 다른 서비스는 `event/NotificationEvent` 를 발행만 하고, 리스너가 커밋 뒤 받는 사람 설정을 확인해 저장한다. 메시지는 친구끼리 1:1, 프론트는 5초(대화)·30초(배지) 폴링.
 - **대화 지우기**(BE #10, FE #24, 2026-11-25): 메시지 목록의 대화 줄마다 휴지통 버튼이 있다. `DELETE /api/messages/{friendId}` 는 지금까지의 메시지를 요청한 사람 쪽에서만 숨긴다(`messages.hidden_by_sender`·`hidden_by_recipient`). 상대에게는 남고, 그 뒤에 온 메시지는 다시 보인다. 안 읽은 것은 읽음으로 돌리고, 두 사람이 모두 지운 메시지는 행을 없앤다. 메시지를 조회하는 쿼리를 새로 쓸 때는 이 두 칸을 걸러야 한다(`MessageRepository.BETWEEN`). 되돌리기 이미지 `moyeolog-{app,frontend}:before-msgdel-20261125`.
+- **실시간 갱신**: 변경 API 는 `event/ChangeEvent` 를 발행하고 화면은 SSE 토픽을 구독한다(아래 '실시간 갱신'). 폴링은 SSE 가 끊겼을 때의 안전망이다.
 - **회원 탈퇴**: `UserDeletingEvent` 를 동기 발행하면 각 서비스의 리스너가 자기 데이터를 지운다. 방장인 모임은 가장 오래된 멤버에게 넘기고 혼자면 삭제. 새 데이터를 추가하면 그 서비스에도 리스너를 둔다.
 - **AI 분석**: 기본은 Ollama 호환 서버(`LLM_BASE_URL`, 기본 `https://ai.ruraeru.xyz`)의 `/api/chat`, 토큰은 `LLM_API_KEY`. Ollama 가 실패(연결·150초 초과·HTTP 오류·형식 오류)하면 `GEMINI_API_KEY` 가 있을 때 Gemini 로 다시 보낸다. 구현은 `GeminiService` 한 곳(이름은 그대로). 분석 요청만 nginx·axios 타임아웃 300초. LLM 을 기다리는 동안 DB 트랜잭션을 잡지 않고(`AiAnalysisSupport`), 같은 대상 분석 중이면 409.
 - **Swagger**: 기본으로 꺼져 있다. 필요하면 `.env` 에 `SWAGGER_ENABLED=true`.
@@ -151,6 +152,23 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **배포할 때**: 배포 폴더의 서브모듈에 다른 작업의 커밋 전 변경이 있을 수 있다. 그럴 때는 깨끗한 `main` worktree 를 빌드 컨텍스트로 덮어쓴 compose 파일을 `-f` 로 더 붙여 빌드하고 `docker compose up -d --no-build` 로 올린다(2026-11-25 에 이렇게 했다).
 - **알고 있는 한계**: 가운데는 좌표 평균이지 이동 시간 기준이 아니다. 두 명일 때는 가운데와 내 출발지로 상대 위치를 대략 짐작할 수 있다.
 - **PR**: BE #6·#8·#9, FE #14·#16·#19·#20·#21·#22·#23·#25. 작업 worktree `/home/ruraeru/moyeolog-midpoint/{be,fe}`. 되돌리기 이미지 `moyeolog-{app,frontend}:before-midpoint-20261125`, 백업 `data/backup/db-20261125-093541.sql.gz`.
+
+## 실시간 갱신 (SSE, feat/live-refresh, 2026-11-25)
+
+다른 사람이 만든 변경(일정·메모·친구·모임·토픽·메시지·알림)이 새로고침 없이 1초 안에 뜬다. WebSocket 이 아니라 SSE 다(서버 → 브라우저 한 방향, Caddy → nginx → Spring 을 그대로 통과).
+
+- **백엔드** `live/`: `GET /api/events`(`text/event-stream`, 기존 JWT). 연결 직후 `event: ready`, 변경 때 `event: changed` + `data: {"topics":[…]}`, 25초마다 `: ping`. 이벤트는 '무엇이 바뀌었는지'만 싣고 본문은 기존 조회 API 가 권한을 검사해 준다.
+- **토픽**: `schedules`, `schedule:{id}`, `memos`, `friends`, `groups`, `group:{id}`, `messages`, `notifications`. `group:{id}` 는 그 모임 멤버(변경 전·후)에게만 보낸다. 모임 밖 공유받은 사람·참여자는 같은 이벤트에서 나머지 토픽만 받는다.
+- **발행**: 서비스가 트랜잭션 안에서 `event/ChangeEvent` 를 내고 `live/LiveEventListener` 가 커밋 뒤에 보낸다. 받는 사람 계산은 `live/LiveAudience`(일정 = 작성자·참여자·모임 멤버, 메모 = 작성자·공유받은 사람·모임 멤버), 사람마다 토픽을 묶는 것은 `event/ChangeEvents`. **새 변경 API 를 추가하면 그 서비스에서 `ChangeEvent` 도 낸다.** 삭제·공유 해제·내보내기는 지우기 전에 받는 사람을 계산한다.
+- **연결**: 메모리 등록부 `LiveHub`(앱 인스턴스가 하나라는 전제. 여러 대로 늘리면 인스턴스 간 전달이 필요하다). 사용자당 6개(넘으면 `event: evicted` 뒤 닫음), 수명 min(30분, 토큰 만료), 로그아웃·모든 기기 로그아웃·회원 탈퇴 때 닫는다. 보내기는 작업마다 가상 스레드에서 한다. 설정 `live.max-connections-per-user`·`max-age-ms`·`heartbeat-ms`(기본값으로 충분, 환경변수 없음).
+- **`SecurityConfig`**: `DispatcherType.ASYNC` permitAll. 첫 요청에서 이미 인증했고, 이게 없으면 스트림이 끝날 때 401 이 난다.
+- **프론트**: `lib/live.ts`(`fetch` 스트림 SSE 클라이언트. `EventSource` 는 Authorization 헤더를 못 보낸다), `components/LiveEvents.tsx`(탭이 보이는 동안 연결 하나, 다시 붙으면 전체를 한 번 새로 고침), `hooks/useVisiblePolling.ts`. 화면은 `useLiveTopics([...], 조용한 다시 불러오기)` 로 구독한다. **자동 갱신 함수는 로딩 표시를 띄우지 않고 실패해도 보던 목록을 둔다(`silent`).**
+- **폴링은 안전망으로 남아 있다**: SSE 가 붙어 있으면 전부 60초, 끊기면 원래 주기(일정·친구·홈·모임 15초, 메모 30초, 메시지 5초, 토픽 탭 10초·토픽 상세 5초, 중간 지점 15초, 배지 30초). 재접속은 1초 → 최대 30초, `evicted` 를 받으면 5분 쉰다.
+- **nginx**: `location = /api/events`(버퍼링·캐시·gzip 끔, `proxy_read_timeout 2100s`). 전용 `events_limit`(60r/m, burst 30)과 IP 당 동시 `events_conn` 30. 재접속이 `api_limit` 을 쓰지 않는다.
+- **QA**: `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.live.yml`(ea → wx → live 순서로 붙임). `./pw.sh node scripts/live-ui.js --restart`(화면, 14건: 반영 0.3~0.9초, 탭 숨김·복귀, 백엔드 재시작 뒤 재접속. 재시작은 `state/live-restart.flag` 가 생기면 바깥에서 `docker restart moyeolog-qa-app` 후 지운다), `scripts/live-wire.js`(스트림 직접 확인 7건: 모임 ID 누출 없음, 연결 상한). **열린 SSE 때문에 Playwright `networkidle` 은 오지 않는다. `domcontentloaded` + `/api/events` 응답 대기를 쓴다.**
+- **PR**: BE #11, FE #26. 작업 worktree `/home/ruraeru/moyeolog-fix/live-{be,fe,deploy}`, 지시서·보고서 `LIVE_BRIEF.md`·`LIVE_REVIEW.md`·`LIVE_REPORT_{BE,FE}.md`(같은 폴더).
+- **배포 순서**: ① `backup.sh` ② `docker compose up -d --build`(백엔드·프론트 같이) ③ `docker exec moyeolog-nginx nginx -t && docker exec moyeolog-nginx nginx -s reload`(**필수**: 새 location·limit zone) ④ 도메인에서 `curl -sN -H "Authorization: Bearer <토큰>" https://moyeolog.ruraeru.xyz/api/events` 로 `event:ready` 와 25초 `: ping` 확인(Caddy 경유 버퍼링). 마이그레이션·새 환경변수 없음.
+- **알고 있는 한계**: 닉네임·프로필 사진, AI 분석 결과, 메모 변경으로 바뀌는 '일정에 연결된 메모', 대화 지우기(내 쪽만)는 실시간으로 가지 않는다. 일정 상세 모달·메모 상세는 열려 있는 동안 내용이 바로 바뀌지 않는다(목록은 바뀐다). 끊긴 동안의 이벤트는 다시 보내지 않고 재접속 뒤 전체 새로 고침으로 메운다. 한 IP 뒤에서 30탭을 넘으면 그 뒤 탭은 429 → 폴링으로 돈다.
 
 ## 2차 QA 와 수정 (2026-11-22)
 
