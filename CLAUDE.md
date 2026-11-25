@@ -95,7 +95,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
   - Tailwind 기본색(indigo/gray 등), `font-bold` 이상, `uppercase`, `transition-all`, 그라데이션, 이모지는 쓰지 않는다. 라이트 모드 전용이다.
 - **되돌리기**: 배포 직전 운영 프론트 이미지를 `moyeolog-frontend:before-ui-20261124` 로 남겨 뒀다. 모임 얼굴 배포 직전 이미지는 `moyeolog-{frontend,app}:before-gi-20261124`, 백업 `data/backup/db-20261124-131227.sql.gz`.
 
-## 이메일 가입 + 카카오 연동 (feat/email-auth, 2026-11-25, 아직 운영 배포 전)
+## 이메일 가입 + 카카오 연동 (feat/email-auth, 2026-11-25 운영 배포)
 
 계정 하나에 로그인 방법 두 개(이메일+비밀번호, 카카오)가 붙는다. 계정 두 개를 합치는 기능은 없다.
 
@@ -109,6 +109,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **메일**: `SPRING_MAIL_*`, `MAIL_FROM`, `APP_URL`. `SPRING_MAIL_HOST` 가 비면 메일이 필요한 요청은 503. 발송은 커밋 뒤 별도 스레드. 상한(앱 메모리): 이메일별 1분 1통·1시간 5통, 전체 시간당 200통(보안 알림은 제외), 이메일 등록은 사용자별 하루 5통.
 - **nginx**: `account_limit`(분당 10, `/api/account/` 와 `/api/users/me/{password,email,kakao}`), `credentials_limit`(분당 20, `/api/auth/callback/credentials`).
 - **배포 순서**: ① `backup.sh` ② `migrations/2026-11-25-email-auth/pre-deploy.sql`(`kakao_id` NULL 허용. 새 컬럼·`email_verifications` 는 Hibernate 가 만든다) ③ `.env` 에 SMTP 값 ④ `docker compose up -d --build` ⑤ nginx reload ⑥ 실제 카카오로 로그인·연결·409 확인(QA 에서 실제 OAuth 는 못 돌렸다).
+- **배포(2026-11-25)**: PR BE #5, FE #8·#9(로그인 화면의 이메일 폼을 '이메일로 계속하기' 버튼 뒤로 접음), DEPLOY #12 머지 후 운영 반영. 직전 백업 `data/backup/db-20261125-080616.sql.gz`·`uploads-20261125-080616.tar.gz`, 되돌리기용 이미지 `moyeolog-{app,frontend}:before-ea-20261125`. SMTP 는 Gmail(앱 비밀번호, `.env`). 발송은 SMTP 단계까지 확인했고, 실제 카카오 로그인·연결은 아직 확인하지 않았다.
 - **작업물**: worktree `/home/ruraeru/moyeolog-fix/ea-{be,fe,deploy}`, 계약 `EA_BRIEF.md`·`EA_FIX.md`, 보고서 `ea-report/`(리뷰 `review.md`·`review2.md`, QA `qa3.md`). QA 는 `/home/ruraeru/moyeolog-qa` 에서 `docker-compose.ea.yml`(mailpit 127.0.0.1:8025).
 - **알고 있는 한계**: 응답 시간으로 계정 유무를 추측할 여지(측정 안 함). 여러 IP 로 계정 잠금(100회)을 걸 수 있음(비밀번호 찾기로 풀림). 가입 요청으로 시간당 200통 상한을 채우면 그동안 가입·재설정 메일이 버려짐. 비밀번호 변경·재설정과 같은 초에 한 로그인은 받은 토큰이 바로 401(`tokens_valid_after` 가 초 단위). 카카오를 해제한 뒤 그 카카오로 시작하면 빈 새 계정이 생김.
 
