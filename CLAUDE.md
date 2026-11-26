@@ -217,6 +217,7 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **nginx**: `location ~ ^/api/groups/[^/]+/date-polls/[^/]+/recommend$` 에 `proxy_read_timeout 300s`(분석 요청과 같음).
 - **QA**: `./pw.sh node scripts/date-poll-ui.js`(61건: 권한, 만들기, 고르기, 다른 창 반영 0.2~0.45초, 실제 LLM 추천 2~5초, 확정 → 일정, 읽기 전용, 지우기, 모바일 375px 31칸).
 - **배포(2026-11-26)**: 백엔드·프론트를 같이 올리고 nginx reload(새 location 때문에 필수). 마이그레이션·새 환경변수 없음. 백업 `data/backup/db-20261126-022558.sql.gz`, 되돌리기 이미지 `moyeolog-{app,frontend}:before-datepoll-20261126`. 운영에서 컨테이너 정상, 두 테이블 생성, 토큰 없는 요청 401, 앱 로그 오류 0 까지 봤고 로그인한 화면은 확인하지 못했다.
+- **권한 변경(BE #14, FE #37, 2026-11-26 배포)**: 조율 만들기는 모임 멤버 누구나 한다. 재촉·날짜 정하기·지우기는 그 조율을 만든 사람 또는 방장만(응답의 `canManage`). 위 API 목록의 '모임장만'은 이 규칙으로 읽는다. 알림 문구의 이름은 실제로 행동한 사람이다. 격자 칸 날짜는 모든 칸이 월/일(`11/27`)이다. 만든 사람이 모임을 나가면 그 조율은 방장만 관리한다. 사용자 요청으로 테스트·타입 검사·QA 를 돌리지 않고 배포했다(이미지 빌드의 컴파일만 통과). `DatePollIntegrationTest` 는 코드만 고쳤고, QA 스크립트 `date-poll-ui.js` 의 '멤버에게 버튼 없음' 검사는 옛 권한 기준이다. 되돌리기 이미지 `moyeolog-{app,frontend}:before-pollmembers-20261126`, 백업 `data/backup/db-20261126-023925.sql.gz`.
 - **PR**: BE #13, FE #36. 구현은 opus 에이전트 둘(`poll-be`, `poll-fe`)이 했다. 지시서·보고서 `/home/ruraeru/moyeolog-fix/DATEPOLL_BRIEF.md`·`DATEPOLL_REPORT_{BE,FE}.md`·`DATEPOLL_QA.md`.
 - **알고 있는 한계**: 같은 IP(같은 와이파이)에서 여럿이 한 모임을 동시에 보면 `api_limit`(10r/s)에 걸려 갱신이 늦을 수 있다(변경 하나마다 탭마다 목록 5개를 다시 부른다). AI 요약 문장은 어색하거나 사실과 다를 수 있다(추천 날짜·이유만 코드가 거른다). 모임장이 격자 칸을 누르면 자기 선택도 바뀐다. 확정된 날은 격자 칸에 따로 표시되지 않는다. 일정이 지워져도 조율의 `scheduleId` 는 남는다. LLM 실패 화면은 QA 에서 눈으로 보지 못했다(백엔드 테스트만).
 
