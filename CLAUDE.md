@@ -201,6 +201,21 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **보강(FE #34, 2026-11-26 배포)**: layout 은 기본 `og:url` 을 주지 않는다(`pageMeta` 의 `path` 는 선택. 전에는 `/help` 등 모든 화면이 첫 화면 주소로 나갔다). `next.config.ts` 의 `htmlLimitedBots` 에 카카오톡·네이버·라인 등 수집기를 넣어 메타 태그가 항상 `<head>` 에 들어간다. 되돌리기 이미지 `moyeolog-frontend:before-ogroot-20261126`, 백업 `data/backup/db-20261126-003445.sql.gz`. 첫 화면 주소만 카카오톡 미리보기가 안 뜨던 것은 코드가 아니라 카카오톡에 저장된 예전 미리보기 때문이었다(`/?v2` 는 바로 떴다).
 - **확인하지 못한 것·한계**: 실제 카카오톡·문자에서의 모양. 카카오톡은 미리보기를 저장해 두므로 이미 공유한 링크는 카카오 개발자 도구의 공유 디버거에서 캐시를 지워야 바뀐다. 모임 사진은 미리보기 이미지로 쓰지 않는다(업로드가 webp 인데 카카오톡의 webp 미리보기 지원을 확인하지 못했다). robots.txt·sitemap 은 없다.
 
+## 모임 공지 + 투표 (feat/group-notice, 2026-11-26 운영 배포)
+
+모임 화면의 첫 탭이 공지다. 탭 순서는 공지·일정·메모·토픽·멤버(`?tab=notice|calendar|memos|topics|members`, 기본 `notice`). 방장이 공지를 쓰고 멤버는 읽고 투표한다. 메모·토픽의 모임 고정은 각자 탭에 그대로 있다.
+
+- **백엔드** `notice/`: 테이블 `group_notices`, `group_notice_reads`((notice, user) 유일), `group_notice_polls`(공지당 하나), `group_notice_poll_options`(칸 `option_text`·`sort_order`), `group_notice_poll_votes`((option, user) 유일). 부모 FK 는 `ON DELETE CASCADE`. Hibernate 가 만들었다. 권한·알림·실시간 공통 부품은 `NoticeAccess`.
+- **API** `/api/groups/{groupId}/notices`: `GET /`, `GET /{id}`(보는 사람을 읽음 처리) 는 멤버. `POST /`(`{title, content, poll?}`), `PUT /{id}`, `DELETE /{id}`, `PUT·DELETE /{id}/pin`, `POST /{id}/poll/close`, `POST /{id}/poll/remind` 는 방장만. `PUT /{id}/poll/votes` `{optionIds}` 는 멤버(통째로 바꿈, 빈 배열 = 취소).
+- **공지**: 제목 1~100자 + 마크다운 내용. 목록은 고정 먼저, 그다음 최신순. 읽음 수(`readCount`/`memberCount`)와 읽은 사람·아직인 사람. 쓴 방장은 처음부터 읽음이라 새 공지의 읽음 수는 1 이다. 탭 숫자는 안 읽은 공지 수(0이면 숨김).
+- **투표**: 공지를 만들 때만 붙인다(선택지 2~10개, 각 1~100자). 수정으로 투표 내용은 못 바꾼다. 옵션은 복수 선택(`multiple`), 익명(`anonymous` — 선택지별 인원만 보이고 `voters`·`notVoted` 는 빈 목록, 방장에게도), 마감 시각(`closesAt`). 마감 시각이 지나거나 방장이 마감하면 닫힌다(닫힌 투표에 고르기·재촉은 409, 다시 마감은 그대로 성공). 지금 멤버의 표만 센다. 마감 알림은 없다.
+- **알림**: 새 종류 `NotificationType.GROUP_NOTICE`(설정 칸 없이 항상 보냄), 링크 `/groups/{id}?tab=notice`, 새 공지와 재촉 때. **`notifications.type` 은 MySQL ENUM 이라 새 알림 종류를 더할 때마다 `ALTER TABLE` 로 직접 늘려야 한다**(`migrations/2026-11-26-group-notice/pre-deploy.sql` 이 본보기. 안 늘리면 알림 저장만 조용히 실패한다).
+- **실시간**: 변경마다 모임 멤버에게 `group:{id}`. 읽음 처리는 방장과 읽은 본인에게만.
+- **정리**: 모임 삭제 → 공지 전부, 나가기·내보내기 → 그 사람의 읽음·투표, 회원 탈퇴 → 읽음·투표 삭제와 그 사람이 쓴 공지를 지금 방장에게 넘김(`NoticeUserCleanup`).
+- **프론트**: `lib/group-notice-api.ts`, `components/GroupNoticeFormModal.tsx`(쓰기·수정, 새 글일 때만 '투표 붙이기'), `components/GroupNoticeModal.tsx`(상세, 투표, 읽은 사람, 방장의 고정·수정·삭제·마감·재촉), `app/groups/[id]/page.tsx` 의 공지 탭. 알림 화면 라벨 '모임 공지'.
+- **배포**: BE #20, FE #43. 순서는 `backup.sh` → 되돌리기 이미지 → 이미지 빌드 → `pre-deploy.sql` → 교체 → nginx reload. 구현은 opus 에이전트 여섯(분담·계약 `/home/ruraeru/moyeolog-fix/NOTICE_BRIEF.md`, 보고서 `NOTICE_REPORT_*.md`). 사용자 요청으로 테스트·타입 검사·QA 를 돌리지 않았다(이미지 빌드의 컴파일과 앱 기동만 확인, 통합 테스트 `GroupNoticeIntegrationTest` 는 쓰기만 하고 실행하지 않음). 운영에서 앱 기동, 새 테이블 5개, ENUM 변경, 로그 오류 0, 토큰 없는 요청 401 까지 봤다. 로그인한 화면, 권한·집계의 실제 동작, 375px 배치는 확인하지 못했다. 백업 `data/backup/db-20261126-045601.sql.gz`, 되돌리기 이미지 `moyeolog-{app,frontend}:before-notice-20261126`(되돌릴 때 ENUM 은 `pre-deploy.sql` 아래쪽 주석대로).
+- **알고 있는 한계**: 이미 그 모임 화면에 있을 때 공지 알림을 누르면 탭이 바뀌지 않는다(`?tab=` 은 처음에만 읽는다, 일정 알림도 같다). 익명 투표의 재촉 인원 표시는 화면에서 계산한 값이다. 미리보기(`preview`)는 정규식으로 마크다운 기호를 지워 드문 문법은 기호가 남을 수 있다.
+
 ## 고정 (feat/pin, 2026-11-26 운영 배포)
 
 > **지금 규칙(BE #19·FE #42, 2026-11-26 마지막 배포)이 아래 항목들보다 우선한다.** 고정은 둘로 나뉜다.
