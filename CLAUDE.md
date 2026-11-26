@@ -201,6 +201,24 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **보강(FE #34, 2026-11-26 배포)**: layout 은 기본 `og:url` 을 주지 않는다(`pageMeta` 의 `path` 는 선택. 전에는 `/help` 등 모든 화면이 첫 화면 주소로 나갔다). `next.config.ts` 의 `htmlLimitedBots` 에 카카오톡·네이버·라인 등 수집기를 넣어 메타 태그가 항상 `<head>` 에 들어간다. 되돌리기 이미지 `moyeolog-frontend:before-ogroot-20261126`, 백업 `data/backup/db-20261126-003445.sql.gz`. 첫 화면 주소만 카카오톡 미리보기가 안 뜨던 것은 코드가 아니라 카카오톡에 저장된 예전 미리보기 때문이었다(`/?v2` 는 바로 떴다).
 - **확인하지 못한 것·한계**: 실제 카카오톡·문자에서의 모양. 카카오톡은 미리보기를 저장해 두므로 이미 공유한 링크는 카카오 개발자 도구의 공유 디버거에서 캐시를 지워야 바뀐다. 모임 사진은 미리보기 이미지로 쓰지 않는다(업로드가 webp 인데 카카오톡의 webp 미리보기 지원을 확인하지 못했다). robots.txt·sitemap 은 없다.
 
+## 모임 날짜 조율 (feat/date-poll, 2026-11-26 운영 배포)
+
+모임원이 가능한 날짜를 고르면 취합해 추천하고, 모임장이 하나를 정하면 모임 일정이 된다. 모임 화면의 '일정' 탭에 있다.
+
+- **백엔드** `datepoll/`: 테이블 `date_polls`(조율), `date_poll_votes`((조율, 사용자, 날짜) 유일. 날짜가 NULL 인 줄은 '응답했지만 가능한 날 없음'). Hibernate 가 만든다. API 는 `/api/groups/{groupId}/date-polls` 아래다.
+  - `GET /`, `GET /{id}`: 멤버. `POST /`(제목 + 기간, 오늘 이후·최대 31일), `POST /{id}/remind`, `POST /{id}/confirm`(`{date, startTime, endTime?}`), `DELETE /{id}`: 모임장만.
+  - `PUT /{id}/votes` `{dates}`: 내 선택을 통째로 바꾼다(빈 배열 = 가능한 날 없음). `POST /{id}/recommend`: AI 추천.
+- **집계는 코드가 한다**: 날짜별 인원·`best`(인원 많은 순, 같으면 이른 날, 3개까지). LLM 은 요약과 추천 이유만 쓴다(`GeminiService.generateJson`, `AiAnalysisSupport` 의 일반형 `run` — 트랜잭션 밖 호출, 같은 조율이 진행 중이면 409, 실패 502). LLM 이 준 날짜 중 후보 밖·가능한 사람 0명인 날은 버리고, 한자·가나가 섞인 문장은 기본 문구('○명 중 ○명 가능')로 바꾼다. 남는 추천이 없으면 `best` 로 채운다. 추천 뒤 누가 선택을 바꾸면 `stale`.
+- **확정**: `ScheduleService.createSchedule` 로 모임 일정을 만든다(참여자 = 그 날 가능하다고 한 멤버, 끝 시각을 안 주면 1시간). 참여자는 일정 생성 알림만, 나머지 멤버는 확정 알림을 받는다. 조율을 지워도 일정은 남는다.
+- **알림·실시간**: 알림 종류는 `SCHEDULE_PARTICIPANT`, 링크는 `/groups/{id}?tab=calendar`. 변경마다 모임 멤버에게 `group:{id}` 토픽.
+- **정리**: 모임 삭제(`GroupService.deleteGroupInternal`), 멤버 나가기·내보내기, 회원 탈퇴 때 선택·조율을 지운다. 탈퇴한 사람이 만든 조율은 새 모임장에게 넘어간다.
+- **프론트**: `lib/date-poll-api.ts`, `components/DatePollModal.tsx`(조율 창 + 만들기 창), `app/groups/[id]/page.tsx`. 달력 위에 진행 중 조율 카드와 모임장용 '날짜 조율' 버튼. 조율 창은 후보 기간 격자(인원이 많을수록 모임 색이 진해짐), '많이 되는 날' 칩, AI 추천, 모임장의 '이 날로 정하기'·응답 재촉·지우기.
+- **모임 화면의 조용한 갱신**은 429 를 받아도 화면을 오류로 바꾸지 않고 1.5초 뒤 한 번 다시 불러온다(전에는 화면 전체가 오류로 바뀌었다).
+- **nginx**: `location ~ ^/api/groups/[^/]+/date-polls/[^/]+/recommend$` 에 `proxy_read_timeout 300s`(분석 요청과 같음).
+- **QA**: `./pw.sh node scripts/date-poll-ui.js`(61건: 권한, 만들기, 고르기, 다른 창 반영 0.2~0.45초, 실제 LLM 추천 2~5초, 확정 → 일정, 읽기 전용, 지우기, 모바일 375px 31칸).
+- **PR**: BE #13, FE #36. 구현은 opus 에이전트 둘(`poll-be`, `poll-fe`)이 했다. 지시서·보고서 `/home/ruraeru/moyeolog-fix/DATEPOLL_BRIEF.md`·`DATEPOLL_REPORT_{BE,FE}.md`·`DATEPOLL_QA.md`.
+- **알고 있는 한계**: 같은 IP(같은 와이파이)에서 여럿이 한 모임을 동시에 보면 `api_limit`(10r/s)에 걸려 갱신이 늦을 수 있다(변경 하나마다 탭마다 목록 5개를 다시 부른다). AI 요약 문장은 어색하거나 사실과 다를 수 있다(추천 날짜·이유만 코드가 거른다). 모임장이 격자 칸을 누르면 자기 선택도 바뀐다. 확정된 날은 격자 칸에 따로 표시되지 않는다. 일정이 지워져도 조율의 `scheduleId` 는 남는다. LLM 실패 화면은 QA 에서 눈으로 보지 못했다(백엔드 테스트만).
+
 ## 서식 편집기 (feat/rich-editor, 2026-11-26 운영 배포)
 
 마크다운 문법을 몰라도 쓸 수 있게, 원문 칸 + 미리보기 두 칸이던 편집기를 보이는 화면에서 바로 쓰는 편집기 하나로 바꿨다.
