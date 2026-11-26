@@ -203,6 +203,14 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 
 ## 고정 (feat/pin, 2026-11-26 운영 배포)
 
+> **지금 규칙(BE #19·FE #42, 2026-11-26 마지막 배포)이 아래 항목들보다 우선한다.** 고정은 둘로 나뉜다.
+> - **모임 고정(공지)**: `memos.pinned_at`. 모임 메모만, 방장 또는 작성자. `PUT`·`DELETE /api/memos/{id}/group-pin`(개인 메모면 400). 응답 `groupPinnedAt`·`permissions.groupPin`. 모임 탭의 메모 탭과 `/memo` 의 그 모임 폴더에서만 맨 위로 오고 멤버 모두에게 같은 값이다(`compareGroupPinned`, `GET /api/groups/{id}/memos` 정렬).
+> - **내 고정**: `memo_pins`. 읽을 수 있는 사람 누구나, 모임 메모를 포함한 모든 메모. `PUT`·`DELETE /api/memos/{id}/pin`. 응답 `pinnedAt`(보는 사람 것)·`permissions.pin`. `/memo` 의 전체·내 메모·공유받은·즐겨찾기·태그 보기에서만 맨 위로 오고 본인에게만 보인다(`comparePinned`, `GET /api/memos`·`/shared` 정렬).
+> - 둘은 서로 영향이 없다. 모임에서 고정해도 내 메모 보기에서는 내가 직접 고정했을 때만 고정된다. 모임 메모 상세에는 모임 고정 버튼만 있다(내 고정은 `/memo` 목록의 카드에서 한다). `/memo` 카드의 버튼 라벨은 보기와 관계없이 '고정'이다.
+> - **삭제**: 모임 메모(`group_id` 있음)와 모임 토픽은 작성자 또는 그 모임의 방장이 지운다(`permissions.delete`, 토픽 응답 `canDelete`). 개인 메모와 모임에 공유된 개인 메모는 작성자만.
+> - 모임을 나가거나 내보내지면 그 사람이 그 모임 메모에 한 내 고정을 지운다(자기가 쓴 것·친구 공유로도 받은 것은 남김). 모임을 지우면 모임 고정을 풀고, 작성자·친구 공유받은 사람 외의 내 고정을 지운다.
+> - 구현은 opus 에이전트 넷, 분담 `/home/ruraeru/moyeolog-fix/PINSPLIT_BRIEF.md`, 보고서 `PINSPLIT_REPORT_*.md`. 테스트·타입 검사·QA 없이 배포했다(이미지 빌드의 컴파일과 앱 기동만 확인). 백업 `data/backup/db-20261126-041823.sql.gz`, 되돌리기 이미지 `moyeolog-{app,frontend}:before-pinsplit-20261126`. 배포 때 모임 고정 2건 유지.
+
 모임의 메모·토픽을 고정해 공지처럼 쓴다. 개인 메모도 작성자가 고정할 수 있다. 모임 메모의 즐겨찾기는 없앴다.
 
 - **API**: `PUT`·`DELETE /api/memos/{id}/pin`, `PUT`·`DELETE /api/topics/{topicId}/pin`(본문 없음, 다시 고정해도 200 이고 처음 시각 유지). 칸 `memos.pinned_at`, `group_topics.pinned_at`(NULL 허용, Hibernate 가 만들었다). 엔티티에서 `insertable=false, updatable=false` 이고 일괄 UPDATE(`updatePinnedAt`)로만 바꾼다. 그래서 수정이 고정을 덮지 않고, 고정이 `version`·수정 시각·마지막 수정자를 바꾸지 않는다.
