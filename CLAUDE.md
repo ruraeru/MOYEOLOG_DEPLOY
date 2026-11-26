@@ -201,6 +201,19 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **보강(FE #34, 2026-11-26 배포)**: layout 은 기본 `og:url` 을 주지 않는다(`pageMeta` 의 `path` 는 선택. 전에는 `/help` 등 모든 화면이 첫 화면 주소로 나갔다). `next.config.ts` 의 `htmlLimitedBots` 에 카카오톡·네이버·라인 등 수집기를 넣어 메타 태그가 항상 `<head>` 에 들어간다. 되돌리기 이미지 `moyeolog-frontend:before-ogroot-20261126`, 백업 `data/backup/db-20261126-003445.sql.gz`. 첫 화면 주소만 카카오톡 미리보기가 안 뜨던 것은 코드가 아니라 카카오톡에 저장된 예전 미리보기 때문이었다(`/?v2` 는 바로 떴다).
 - **확인하지 못한 것·한계**: 실제 카카오톡·문자에서의 모양. 카카오톡은 미리보기를 저장해 두므로 이미 공유한 링크는 카카오 개발자 도구의 공유 디버거에서 캐시를 지워야 바뀐다. 모임 사진은 미리보기 이미지로 쓰지 않는다(업로드가 webp 인데 카카오톡의 webp 미리보기 지원을 확인하지 못했다). robots.txt·sitemap 은 없다.
 
+## 서식 편집기 (feat/rich-editor, 2026-11-26 운영 배포)
+
+마크다운 문법을 몰라도 쓸 수 있게, 원문 칸 + 미리보기 두 칸이던 편집기를 보이는 화면에서 바로 쓰는 편집기 하나로 바꿨다.
+
+- `MOYEOLOG_FE/src/components/RichEditor.tsx`(Tiptap 3.35.0: `@tiptap/react`·`pm`·`starter-kit`·`markdown`·`extension-list`·`extensions`). `value`·`onChange` 는 마크다운이다. **저장 형식은 그대로**라 백엔드·기존 메모·읽기 화면(`@uiw/react-md-editor` 의 `Markdown`)은 바꾸지 않았다.
+- 도구 막대: 굵게, 기울임, 취소선, 소제목(H2), 글머리·번호·체크 목록, 인용, 코드, `@`(일정·메모 연결). `**굵게**` 같은 문법을 쳐도 바로 바뀐다.
+- `@` 연결: `mentions` 를 주면 `@` 뒤 글자로 일정·메모를 찾아 `[@제목](/memo/id)` 링크로 넣는다(예전과 같은 형식, 저장 때 `extractMentionIds` 가 읽는다). 목록은 클릭으로만 고른다.
+- 쓰는 곳: 새 메모(`MemoCreateModal`), 메모 수정(`MemoDetailView`), 새 토픽(`GroupTopicCreateModal`, `@` 연결 없음), `MemoEditModal`(지금 어디서도 쓰지 않는다).
+- 본문 모양은 읽기 화면과 같은 `.wmde-markdown` 을 쓰고, 편집기만의 것은 `globals.css` 의 `.rich-editor`(자리표시 글, 체크 목록, 모바일 16px)다.
+- **한계**: 표와 밑줄은 지원하지 않는다. 표가 든 메모를 이 편집기로 고쳐 저장하면 표가 깨질 수 있다(배포 때 운영 데이터에 표 0건). 밑줄은 마크다운에 없어 껐다.
+- **QA**: `./pw.sh node scripts/rich-editor-ui.js`(26건: 도구 막대, `@` 연결, 저장된 마크다운, 예전 마크다운 메모를 열어 고친 뒤에도 서식 유지, 모바일 16px).
+- **배포**: FE #35. 프론트만 올렸다. 되돌리기 이미지 `moyeolog-frontend:before-richeditor-20261126`, 백업 `data/backup/db-20261126-010249.sql.gz`. 운영에서는 컨테이너 정상·도메인 200·번들에 편집기 포함까지 봤고, 로그인한 화면과 실제 아이폰은 확인하지 못했다.
+
 ## 2차 QA 와 수정 (2026-11-22)
 
 - QA: 운영과 같은 이미지의 격리 스택(`/home/ruraeru/moyeolog-qa/`, compose 프로젝트 `moyeolog-qa`, 127.0.0.1:3093/3094/8093)에서 에이전트 12개가 567건 실행 → 실패 191건. 결과 JSON `results/`, Figma QA 시트 2차 프레임. 스택은 배포 뒤 내렸다(`docker compose down`, 볼륨 유지). 다시 쓰려면 그 폴더에서 `docker compose up -d`.
