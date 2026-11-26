@@ -201,6 +201,16 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **보강(FE #34, 2026-11-26 배포)**: layout 은 기본 `og:url` 을 주지 않는다(`pageMeta` 의 `path` 는 선택. 전에는 `/help` 등 모든 화면이 첫 화면 주소로 나갔다). `next.config.ts` 의 `htmlLimitedBots` 에 카카오톡·네이버·라인 등 수집기를 넣어 메타 태그가 항상 `<head>` 에 들어간다. 되돌리기 이미지 `moyeolog-frontend:before-ogroot-20261126`, 백업 `data/backup/db-20261126-003445.sql.gz`. 첫 화면 주소만 카카오톡 미리보기가 안 뜨던 것은 코드가 아니라 카카오톡에 저장된 예전 미리보기 때문이었다(`/?v2` 는 바로 떴다).
 - **확인하지 못한 것·한계**: 실제 카카오톡·문자에서의 모양. 카카오톡은 미리보기를 저장해 두므로 이미 공유한 링크는 카카오 개발자 도구의 공유 디버거에서 캐시를 지워야 바뀐다. 모임 사진은 미리보기 이미지로 쓰지 않는다(업로드가 webp 인데 카카오톡의 webp 미리보기 지원을 확인하지 못했다). robots.txt·sitemap 은 없다.
 
+## 메모 공유 권한 (feat/memo-share-perm, 2026-11-26 운영 배포)
+
+- **규칙**: 개인 메모를 공유받은 사람은 기본 읽기 전용이다. 작성자가 '수정 가능'으로 공유한 친구만 고칠 수 있다. 개인 메모를 모임에 공유하면 멤버는 읽기만 한다. 모임에서 쓴 메모(`memos.group_id`)는 멤버 누구나 고친다(전과 같다).
+- **친구 공유**: `POST /api/memos/{id}/share` `{friendIds, canEdit?}`(없으면 false). 이미 공유한 친구에게 다시 보내면 그 친구의 권한만 바뀐다(알림은 새 친구에게만). `memo_shares.can_edit`(NOT NULL DEFAULT 0, 기존 공유는 읽기 전용). 수정 가능한 친구는 내용·태그를 고치지만 삭제·재공유·남의 공유 해제·분석은 못 한다.
+- **모임 공유**: `POST`·`DELETE /api/memos/{id}/group-share/{groupId}`. 작성자만, 개인 메모만, 작성자가 멤버인 모임에만. 테이블 `memo_group_shares`((memo_id, group_id) 유일). 모임 메모 목록(`getGroupMemos`)은 모임에서 쓴 메모 다음에 공유된 개인 메모를 준다(공유된 것은 `groupId` 가 null). 알림은 보내지 않는다.
+- **정리**: 메모 삭제, 모임 삭제, 작성자가 모임을 나가거나 내보내질 때 모임 공유를 지운다. 멤버가 나가면 그 모임에 공유된 메모를 더 못 본다. 모임 공유를 해제해도 멤버의 즐겨찾기 행은 남는다(목록에서만 숨겨진다).
+- **응답**: `MemoResponse.sharedGroupIds`, `sharedWith[].canEdit`(둘 다 작성자에게만). 실시간 `LiveAudience.addMemo` 는 공유한 모임의 멤버에게도 `memos`·`group:{gid}` 를 보낸다. **메모를 읽을 수 있는지 판단하는 코드를 새로 쓰면 모임 공유(`MemoGroupShareRepository`)도 같이 본다**(`MemoService.canRead`, `ScheduleService.canReadMemo`).
+- **프론트**: `MemoShareModal`(새 공유와 공유 중인 사람마다 '수정 가능' 체크, '모임에 공유' 칸), `/memo` 목록의 내가 공유한 내 메모 오른쪽 위 '공유함' 칩(`lib/memo-api.ts` 의 `isSharedByMe`), 모임 화면 `MemoCard` 의 '공유된 메모'.
+- **배포**: BE #15, FE #38. 구현은 opus 에이전트가 했다(보고서 `/home/ruraeru/moyeolog-fix/MEMOSHARE_REPORT.md`). 사용자 요청으로 테스트·타입 검사·QA 를 돌리지 않고 배포했다(이미지 빌드의 컴파일만 통과, 고친 테스트 코드는 실행하지 않음). 운영에서 앱 기동, `can_edit` 칸(기존 4행 모두 0)과 `memo_group_shares` 생성, 로그 오류 0 까지 봤다. 로그인한 화면, 새 권한의 실제 동작, 375px 공유 창은 확인하지 못했다. 백업 `data/backup/db-20261126-025248.sql.gz`, 되돌리기 이미지 `moyeolog-{app,frontend}:before-memoshare-20261126`(되돌려도 새 칸·테이블은 남는다. 옛 코드에는 영향 없다).
+
 ## 모임 날짜 조율 (feat/date-poll, 2026-11-26 운영 배포)
 
 모임원이 가능한 날짜를 고르면 취합해 추천하고, 모임장이 하나를 정하면 모임 일정이 된다. 모임 화면의 '일정' 탭에 있다.
