@@ -281,6 +281,18 @@ FE PR #6 (`design/unslop-2`)으로 바꿨다. 2026-11-24 운영에 배포했다.
 - **QA**: `./pw.sh node scripts/rich-editor-ui.js`(26건: 도구 막대, `@` 연결, 저장된 마크다운, 예전 마크다운 메모를 열어 고친 뒤에도 서식 유지, 모바일 16px).
 - **배포**: FE #35. 프론트만 올렸다. 되돌리기 이미지 `moyeolog-frontend:before-richeditor-20261126`, 백업 `data/backup/db-20261126-010249.sql.gz`. 운영에서는 컨테이너 정상·도메인 200·번들에 편집기 포함까지 봤고, 로그인한 화면과 실제 아이폰은 확인하지 못했다.
 
+## 3차 QA 와 수정 (fix/qa3, 2026-11-26 머지, 운영 배포 전)
+
+- **QA**: 로컬 격리 스택(`~/Desktop/MOYEOLOG_QA`, compose 프로젝트 `moyeolog-qa`, `127.0.0.1:3003`, 메일 `127.0.0.1:8025`)에서 에이전트 25개(q01~q25, 영역별)가 1655건 실행 → 실패 710(높음 5·중간 170·낮음 535), 보류 13. 결과 `results/qNN.json`, 스크립트 `scripts/qNN-*`.
+- **수정**: 에이전트 25개가 영역별 worktree(`~/Desktop/MOYEOLOG_FIX/qNN/{fe,be}`, 브랜치 `fix/qa3-qNN`)에서 고치고 `fix/qa3` 로 합쳤다(`~/Desktop/MOYEOLOG_FIX/merge/{fe,be}`). 지시서 `FIX_BRIEF.md`, 합치며 정한 것 `MERGE_FE.md`·`MERGE_BE.md`. PR BE #21, FE #45 머지.
+- **결과**(`results/final.json`): 실패 710건 중 수정 692(재검증 통과 688·실패 3·보류 1), 결정 필요 13, 고치지 않음 5. 재검증은 합친 코드로 스택을 다시 빌드해(`docker-compose.fix.yml` 을 `-f` 로 더 붙임) 실제 화면에서 했다. 마지막 빌드 뒤에는 q04·q20 만 다시 돌렸고, FE 에 `main`(#44)을 합친 뒤에는 재검증하지 않았다.
+- **재검증 뒤 남은 것**: `q04-014`(홈 일정 줄 높이가 데스크톱에서 날씨 유무로 3px 차), `q04-043`(390px 홈 일정 줄에서 참여자 이름이 잘림. q04-014 수정의 부작용), `q20-053`(날짜 조율 AI 요약에 '~네요' 가 섞임), `q15-055`(지난 날짜 알림을 만들 수 없어 확인 못 함).
+- **결정 필요 13건**: 첫 화면 환영 안내(q02-072), 320px 홈 요일 칸 44px(q04-021), 읽기 화면에서 체크 목록 체크(q07-008), 아이디 대소문자 구분(q13-007, 콜레이션 변경 필요), 모임의 대기 중 초대 보기·취소(q17-009), 모임 삭제 알림(q17-057, 새 ENUM), 공지 상세의 관리 버튼 배치(q19-065), 날짜 조율 확정 일정의 작성자(q20-049), 토픽 댓글 알림 묶기(q22-067), 로그인된 기기 정보·기기별 로그아웃(q23-070, 새 칸), 새 메모가 실시간으로 낄 때의 카드 밀림(q24-058), 일정 화면 머리의 높이 통일(q25-023), 화면마다 다른 제목 시작 위치(q25-034).
+- **백엔드에서 바뀐 것**: 새 테이블·칸·ENUM 없음(마이그레이션 SQL 없음). 새 API `POST /api/account/verify/preview`, `POST /api/account/password-reset/check`(링크를 쓰지 않고 확인), `DELETE /api/notifications/read`. 알림 링크가 공지 `/groups/{id}?tab=notice&notice={noticeId}`, 모임 초대 `/notifications?tab=invites&group={groupId}` 로 바뀌었다(저장된 알림은 옛 링크 그대로). 공지 투표 재촉은 5분 쿨다운(앱 메모리). 메모·일정을 지우면 그것을 가리키던 알림도 지운다. 메모 공유 권한만 바꿔도 알림이 간다. 날짜 조율 AI 문장은 저장 때 닉네임 속 공백과 '~습니다' 끝맺음을 고친다. 테스트 264개.
+- **프론트에서 바뀐 것**: 확인 창(`AlertContainer`)의 Esc·첫 포커스·Tab 가두기, `ui.tsx` 의 `Modal`(닫기 버튼 터치 영역, 닫을 때 포커스 복귀)·`UnderlineTabs`·`PageHeader`, 터치 기기의 터치 영역(`globals.css` 의 `pointer: coarse`)이 바뀌어 모든 화면에 영향이 있다. 모임 화면은 `?notice=`·`?poll=`·`?topic=` 으로 창을 바로 연다. Kakao 서비스는 `lib/kakao.ts` 의 `loadKakaoServices()` 로 부른다.
+- **Figma QA 시트**: 이번 QA 프레임에 조치·재검증 결과를 반영했다(00 요약, 영역 표 710행, 05 결정 필요·고치지 않음, 06 재검증 뒤 남은 실패). 스크립트 `~/Desktop/MOYEOLOG_QA/figma-js/fix-*.js`·`fix2-*.js`.
+- **배포할 때**: 백엔드·프론트를 같이 올린다(프론트가 새 API 를 부른다). `backup.sh` → 빌드 → nginx reload. 운영에는 아직 올리지 않았다.
+
 ## 2차 QA 와 수정 (2026-11-22)
 
 - QA: 운영과 같은 이미지의 격리 스택(`/home/ruraeru/moyeolog-qa/`, compose 프로젝트 `moyeolog-qa`, 127.0.0.1:3093/3094/8093)에서 에이전트 12개가 567건 실행 → 실패 191건. 결과 JSON `results/`, Figma QA 시트 2차 프레임. 스택은 배포 뒤 내렸다(`docker compose down`, 볼륨 유지). 다시 쓰려면 그 폴더에서 `docker compose up -d`.
